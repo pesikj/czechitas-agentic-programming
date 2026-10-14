@@ -1,0 +1,36 @@
+---
+// Layout for sign-in, password and recovery pages: no course navigation or command bar.
+import BaseHead from '../components/BaseHead.astro';
+import ThemeToggle from '../components/ThemeToggle.astro';
+import UserMenu from '../components/UserMenu.astro';
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<!doctype html>
+<html lang="cs">
+  <head>
+    <BaseHead title={`${title} · Kurz`} />
+  </head>
+  <body>
+    <a class="skip-link" href="#obsah">Přeskočit na obsah</a>
+    <header class="topbar">
+      <a class="brand" href="/">Materiály kurzu</a>
+      <span class="cwd"></span>
+      <div class="topbar-tools">
+        <UserMenu />
+        <ThemeToggle />
+      </div>
+    </header>
+    <main id="obsah" tabindex="-1" class="auth-main">
+      <div class="auth-panel">
+        <h1>{title}</h1>
+        <slot />
+      </div>
+    </main>
+  </body>
+</html>

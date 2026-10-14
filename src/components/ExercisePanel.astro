@@ -1,0 +1,98 @@
+---
+// "Moje odpověď": optional answer fields defined by the content. Saving is explicit; the editor
+// works without JavaScript (plain form post) and is enhanced by src/scripts/responses.ts.
+import type { Exercise } from '../lib/content/types';
+import { withNext } from '../server/auth/redirect';
+import { formatDateTime } from '../server/format';
+import type { ResponseRecord } from '../server/responses';
+
+interface Props {
+  exercise: Exercise | undefined;
+  saved?: ResponseRecord | undefined;
+  returnPath: string;
+  /** Result of a form post without JavaScript (from the query string). */
+  outcome?: 'saved' | 'error' | undefined;
+}
+
+const { exercise, saved, returnPath, outcome } = Astro.props;
+const signedIn = Boolean(Astro.locals.user);
+const olderRevision = saved && exercise && saved.exerciseRevision !== exercise.revision;
+---
+
+{
+  exercise && (
+    <section class="exercise-panel" id={`cviceni-${exercise.id}`} aria-labelledby={`exercise-${exercise.id}`}>
+      <h2 id={`exercise-${exercise.id}`}>Moje odpověď</h2>
+      {exercise.title && <p class="exercise-title">{exercise.title}</p>}
+      {!signedIn && (
+        <p class="note">
+          Odpovědi si mohou ukládat účastníci kurzu.{' '}
+          <a href={withNext('/prihlaseni', returnPath)}>Přihlaste se</a>, pokud máte účet.
+        </p>
+      )}
+      {signedIn && <p class="note">Odpověď je nepovinná. Uloženou odpověď uvidí administrátoři kurzu.</p>}
+      {olderRevision && (
+        <p class="note revision-note">
+          Vaše uložená odpověď patří k dřívější verzi tohoto cvičení (revize {saved.exerciseRevision}, nyní{' '}
+          {exercise.revision}). Zadání se mohlo změnit.
+        </p>
+      )}
+
+      {signedIn && (
+        <form
+          method="post"
+          action={`/odpovedi/${encodeURIComponent(exercise.id)}`}
+          class="response-form"
+          data-exercise-id={exercise.id}
+        >
+          <input type="hidden" name="return" value={returnPath} />
+          <div class="mode-switch" role="group" aria-label="Režim" hidden>
+            <button type="button" data-mode="write" aria-pressed="true">
+              Psát
+            </button>
+            <button type="button" data-mode="preview" aria-pressed="false">
+              Náhled
+            </button>
+          </div>
+          {exercise.fields.map((field) => {
+            const id = `pole-${exercise.id}-${field.id}`;
+            return (
+              <div class="field response-field">
+                <label for={id}>{field.label}</label>
+                {field.guidance && (
+                  <span class="hint" id={`${id}-hint`}>
+                    {field.guidance}
+                  </span>
+                )}
+                <textarea
+                  id={id}
+                  name={`pole.${field.id}`}
+                  rows="6"
+                  spellcheck="true"
+                  aria-describedby={field.guidance ? `${id}-hint` : undefined}
+                >{saved?.fields[field.id] ?? ''}</textarea>
+                <div class="response-preview prose" hidden aria-live="polite" />
+              </div>
+            );
+          })}
+          <div class="response-actions">
+            <button type="submit">Uložit odpověď</button>
+            <p class="save-status" role="status" aria-live="polite">
+              {outcome === 'saved'
+                ? 'Odpověď je uložená.'
+                : outcome === 'error'
+                  ? 'Odpověď se nepodařilo uložit. Zkuste to prosím znovu.'
+                  : saved
+                    ? `Uloženo ${formatDateTime(saved.savedAt)}.`
+                    : 'Zatím neuloženo.'}
+            </p>
+          </div>
+          <p class="hint">
+            Píšete v Markdownu. Enter vkládá nový řádek; odpověď se uloží až tlačítkem <strong>Uložit odpověď</strong>.
+            Neuložený text se po zavření stránky ztratí.
+          </p>
+        </form>
+      )}
+    </section>
+  )
+}

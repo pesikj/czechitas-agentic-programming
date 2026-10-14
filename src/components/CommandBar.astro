@@ -1,0 +1,43 @@
+---
+import type { CommandContext } from '../lib/commands';
+import HelpList from './HelpList.astro';
+
+interface Props {
+  context: CommandContext;
+}
+
+const { context } = Astro.props;
+---
+
+<section class="command-bar" aria-label="Příkazový řádek pro navigaci" data-context={JSON.stringify(context)}>
+  <div class="command-output" id="command-output" aria-live="polite"></div>
+  <div class="command-help" id="command-help" hidden>
+    <h2>Nápověda</h2>
+    <HelpList />
+  </div>
+  <form class="command-form" autocomplete="off">
+    <span class="prompt" aria-hidden="true">&gt;</span>
+    <label for="command-input" class="visually-hidden">Příkaz pro navigaci webu</label>
+    <input
+      id="command-input"
+      type="text"
+      role="combobox"
+      aria-autocomplete="list"
+      aria-expanded="false"
+      aria-controls="command-suggestions"
+      aria-describedby="command-hint"
+      spellcheck="false"
+      autocapitalize="off"
+      enterkeyhint="go"
+      placeholder="/next, /back, /open 1, /home, /help"
+    />
+    <ul id="command-suggestions" class="command-suggestions" role="listbox" aria-label="Návrhy příkazů" hidden></ul>
+  </form>
+  <p id="command-hint" class="visually-hidden">
+    Napište příkaz a stiskněte Enter. Šipkami vyberete návrh, Tab doplní příkaz, Escape zavře návrhy.
+  </p>
+</section>
+
+<script>
+  import '../scripts/command-bar';
+</script>

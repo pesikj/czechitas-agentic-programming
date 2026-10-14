@@ -1,0 +1,41 @@
+---
+import { COMMANDS, commandLabel } from '../lib/commands';
+---
+
+<dl class="help-list">
+  {
+    COMMANDS.map((command) => (
+      <>
+        <dt>
+          <code>{commandLabel(command.name)}</code>
+        </dt>
+        <dd>
+          {command.description}
+          {command.aliases.filter((alias) => alias !== '?').length > 0 && (
+            <span class="aliases">
+              {' '}
+              (také{' '}
+              {command.aliases
+                .filter((alias) => alias !== '?')
+                .map((alias) => `/${alias}`)
+                .join(', ')}
+              )
+            </span>
+          )}
+          {command.examples && (
+            <span class="examples">
+              <br />
+              Příklady: {command.examples.map((example, index) => [index > 0 ? ', ' : '', <code>{example}</code>])}
+            </span>
+          )}
+        </dd>
+      </>
+    ))
+  }
+</dl>
+<ul class="help-notes">
+  <li>Příkaz napište do řádku dole a stiskněte Enter, nebo klikněte na tlačítko příkazu. Klávesou <kbd>/</kbd> se do řádku rychle přesunete.</li>
+  <li>Čísla lekcí najdete v přehledu lekcí a v obsahu kurzu. <code>/open 2.3</code> otevře třetí část druhé lekce.</li>
+  <li><code>/back</code> otevře předchozí část lekce. Tlačítko Zpět v prohlížeči se vrací podle historie prohlížení.</li>
+  <li>Tento řádek slouží jen k pohybu po webu. Příkazy pro terminál a prompty pro agenta zadávejte ve svém terminálu.</li>
+</ul>

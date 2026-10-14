@@ -1,0 +1,19 @@
+---
+// Shared <head> content: styles and the pre-paint theme script.
+import '@webtui/css/full.css';
+import '../styles/theme.css';
+import '../styles/prose.css';
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex" />
+<title>{title}</title>
+<!-- Synchronous on purpose: applies the theme before first paint. -->
+<script is:inline src="/theme-init.js"></script>

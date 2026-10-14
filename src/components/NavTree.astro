@@ -1,0 +1,57 @@
+---
+import type { ContentModel, TocNode } from '../lib/content/types';
+import { lectureNumber, partFileName, partHref } from '../lib/navigation';
+
+interface Props {
+  nodes: TocNode[];
+  model: ContentModel;
+  current?: { lectureId: string; partId: string } | undefined;
+  nested?: boolean;
+}
+
+const { nodes, model, current, nested = false } = Astro.props;
+const lectures = new Map(model.lectures.map((lecture) => [lecture.id, lecture]));
+---
+
+<ul class={nested ? undefined : 'tree'} role="list">
+  {
+    nodes.map((node) => {
+      if (node.kind === 'group') {
+        return (
+          <li>
+            <span class="group-title">{node.title}</span>
+            <Astro.self nodes={node.children} model={model} current={current} nested />
+          </li>
+        );
+      }
+      const lecture = lectures.get(node.lectureId);
+      if (!lecture) return null;
+      const isCurrent = current?.lectureId === lecture.id;
+      return (
+        <li>
+          <details open={isCurrent || undefined}>
+            <summary>
+              <span class="number">
+                {lectureNumber(model, lecture)}
+              </span>
+              {lecture.title}
+            </summary>
+            <ol class="parts" role="list">
+              {lecture.parts.map((part) => (
+                <li>
+                  <a
+                    href={partHref(lecture.id, part.id)}
+                    aria-current={isCurrent && current?.partId === part.id ? 'page' : undefined}
+                  >
+                    <span class="file">{partFileName(part)}</span>
+                    <span class="title">{part.title}</span>
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </details>
+        </li>
+      );
+    })
+  }
+</ul>

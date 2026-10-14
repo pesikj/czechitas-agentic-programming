@@ -1,0 +1,49 @@
+---
+import AuthLayout from '../layouts/AuthLayout.astro';
+import { normaliseEmail, requestPasswordReset } from '../server/auth/accounts';
+import { resetByAccount, resetByAddress } from '../server/auth/rate-limit';
+import { clientAddress, formField } from '../server/auth/request';
+import { getConfig } from '../server/config';
+
+let submitted = false;
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const email = normaliseEmail(await formField(form, 'email'));
+  const address = clientAddress(Astro);
+  // Over the limit: silently skip sending, but show the same confirmation.
+  if (email && resetByAccount.hit(email) && resetByAddress.hit(address)) await requestPasswordReset(email);
+  submitted = true;
+}
+const support = getConfig().SUPPORT_EMAIL;
+---
+
+<AuthLayout title="Zapomenuté heslo">
+  {
+    submitted ? (
+      <>
+        <p class="notice" role="status">
+          Pokud k této adrese existuje aktivní účet, poslali jsme na ni odkaz pro nastavení nového hesla. Odkaz platí{' '}
+          {getConfig().PASSWORD_RESET_TTL_MINUTES} minut.
+        </p>
+        <p>
+          E-mail nepřišel? Zkontrolujte složku nevyžádané pošty. Pokud jste se ještě nepřihlásili poprvé, použijte
+          jednorázové heslo z pozvánky, případně napište na <a href={`mailto:${support}`}>{support}</a>.
+        </p>
+      </>
+    ) : (
+      <>
+        <p>Zadejte e-mail svého účtu. Pošleme vám odkaz, kterým si nastavíte nové heslo.</p>
+        <form method="post" class="form" novalidate>
+          <div class="field">
+            <label for="email">E-mail</label>
+            <input id="email" name="email" type="email" autocomplete="username" required />
+          </div>
+          <button type="submit">Poslat odkaz</button>
+        </form>
+      </>
+    )
+  }
+  <div class="secondary-links">
+    <a href="/prihlaseni">Zpět na přihlášení</a>
+  </div>
+</AuthLayout>

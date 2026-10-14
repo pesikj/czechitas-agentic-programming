@@ -1,0 +1,85 @@
+---
+import AuthLayout from '../layouts/AuthLayout.astro';
+import FormErrors from '../components/FormErrors.astro';
+import { changePassword } from '../server/auth/accounts';
+import { PASSWORD_MIN_LENGTH } from '../server/auth/password';
+import { safeNext } from '../server/auth/redirect';
+import { formField } from '../server/auth/request';
+import { sessionCookieName, sessionCookieOptions } from '../server/auth/sessions';
+
+const user = Astro.locals.user!;
+const next = safeNext(Astro.url.searchParams.get('next'));
+const firstTime = user.mustChangePassword;
+
+let errors: string[] = [];
+let changed = false;
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const result = await changePassword(user.id, {
+    current: await formField(form, 'current'),
+    password: await formField(form, 'password'),
+    confirmation: await formField(form, 'confirmation'),
+  });
+  if (result.ok) {
+    Astro.cookies.set(sessionCookieName(), result.token!, sessionCookieOptions(result.expiresAt!));
+    const target = safeNext(await formField(form, 'next'));
+    if (firstTime) return Astro.redirect(target, 303);
+    changed = true;
+  } else {
+    errors = result.errors;
+    Astro.response.status = 422;
+  }
+}
+---
+
+<AuthLayout title={firstTime ? 'Nastavte si heslo' : 'Změna hesla'}>
+  {
+    firstTime ? (
+      <p>Před prvním vstupem do kurzu si nastavte vlastní heslo. Jednorázové heslo z pozvánky pak přestane platit.</p>
+    ) : (
+      <p>Po změně hesla budete odhlášeni na ostatních zařízeních.</p>
+    )
+  }
+  {changed && <p class="notice" role="status">Heslo bylo změněno.</p>}
+  <FormErrors errors={errors} />
+  <form method="post" class="form" novalidate>
+    <input type="hidden" name="next" value={next} />
+    <input type="hidden" name="username" autocomplete="username" value={user.email} />
+    {
+      !firstTime && (
+        <div class="field">
+          <label for="current">Současné heslo</label>
+          <input id="current" name="current" type="password" autocomplete="current-password" required />
+        </div>
+      )
+    }
+    <div class="field">
+      <label for="password">Nové heslo</label>
+      <span class="hint" id="password-rules">
+        Alespoň {PASSWORD_MIN_LENGTH} znaků. Dobře funguje několik nesouvisejících slov. Nesmí být stejné jako e-mail.
+      </span>
+      <input
+        id="password"
+        name="password"
+        type="password"
+        autocomplete="new-password"
+        required
+        minlength={PASSWORD_MIN_LENGTH}
+        aria-describedby={errors.length > 0 ? 'password-rules form-errors' : 'password-rules'}
+        aria-invalid={errors.length > 0 ? 'true' : undefined}
+      />
+    </div>
+    <div class="field">
+      <label for="confirmation">Nové heslo znovu</label>
+      <input id="confirmation" name="confirmation" type="password" autocomplete="new-password" required />
+    </div>
+    <button type="submit">Uložit heslo</button>
+  </form>
+  {
+    !firstTime && (
+      <div class="secondary-links">
+        <a href={next}>Zpět do kurzu</a>
+      </div>
+    )
+  }
+</AuthLayout>

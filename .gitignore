@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build output and caches
+dist/
+.astro/
+.cache/
+*.tsbuildinfo
+
+# Environment (secrets); the example file is committed
+.env
+.env.*
+!.env.example
+
+# Local data: fetched and published content revisions
+data/
+
+# Tests
+coverage/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editors and OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Claude Code settings
+.claude/
+playwright/.auth/
+.e2e/
+backups/

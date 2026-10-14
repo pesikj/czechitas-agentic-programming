@@ -1,0 +1,72 @@
+---
+import type { CommandContext } from '../lib/commands';
+import type { ContentModel } from '../lib/content/types';
+import NavTree from '../components/NavTree.astro';
+import Breadcrumb, { type Crumb } from '../components/Breadcrumb.astro';
+import CommandBar from '../components/CommandBar.astro';
+import ThemeToggle from '../components/ThemeToggle.astro';
+import BaseHead from '../components/BaseHead.astro';
+import UserMenu from '../components/UserMenu.astro';
+
+interface Props {
+  title: string;
+  courseTitle?: string;
+  model?: ContentModel;
+  current?: { lectureId: string; partId: string };
+  crumbs?: Crumb[];
+  context: CommandContext;
+}
+
+const { title, courseTitle = 'Czechitas Course Terminal', model, current, crumbs = [], context } = Astro.props;
+const pageTitle = title === courseTitle ? title : `${title} · ${courseTitle}`;
+---
+
+<!doctype html>
+<html lang="cs">
+  <head>
+    <BaseHead title={pageTitle} />
+  </head>
+  <body>
+    <a class="skip-link" href="#obsah">Přeskočit na obsah</a>
+    <header class="topbar">
+      {
+        model && (
+          <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="course-nav">
+            Obsah
+          </button>
+        )
+      }
+      <a class="brand" href="/">{courseTitle}</a>
+      <Breadcrumb crumbs={crumbs} />
+      <div class="topbar-tools">
+        {
+          Astro.locals.user && (
+            <form method="get" action="/hledat" role="search" class="header-search">
+              <label for="header-search" class="visually-hidden">Hledat v materiálech</label>
+              <input id="header-search" name="q" type="search" placeholder="Hledat…" />
+            </form>
+          )
+        }
+        <UserMenu signInLink />
+        <ThemeToggle />
+      </div>
+    </header>
+    <div class="shell">
+      {
+        model && (
+          <nav id="course-nav" class="sidebar" aria-label="Obsah kurzu">
+            <button type="button" class="sidebar-close">Zavřít obsah</button>
+            <NavTree nodes={model.toc} model={model} current={current} />
+          </nav>
+        )
+      }
+      <main id="obsah" tabindex="-1">
+        <slot />
+      </main>
+    </div>
+    <CommandBar context={context} />
+    <script>
+      import '../scripts/layout';
+    </script>
+  </body>
+</html>

@@ -1,0 +1,179 @@
+---
+import CourseLayout from '../../../layouts/CourseLayout.astro';
+import AdminNav from '../../../components/AdminNav.astro';
+import Forbidden from '../../../components/Forbidden.astro';
+import FormErrors from '../../../components/FormErrors.astro';
+import {
+  deactivateAccount,
+  deleteAccount,
+  findUserById,
+  reactivateAccount,
+  resetCredentials,
+  sendInvitation,
+  updateAccount,
+  type AdminResult,
+  type Role,
+} from '../../../server/auth/accounts';
+import { formField } from '../../../server/auth/request';
+import { accountStatusLabel, invitationStatusLabel, roleLabel } from '../../../server/admin-labels';
+import { otherContext } from '../../../lib/navigation';
+import { getContent } from '../../../server/content/provider';
+import { formatDateTime } from '../../../server/format';
+import { countResponses } from '../../../server/responses';
+
+const admin = Astro.locals.user;
+const isAdmin = admin?.role === 'admin';
+if (!isAdmin) Astro.response.status = 403;
+
+let result: AdminResult | undefined;
+if (isAdmin && Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const id = Astro.params.id ?? '';
+  const action = await formField(form, 'action');
+  if (action === 'update') {
+    const role: Role = (await formField(form, 'role')) === 'admin' ? 'admin' : 'learner';
+    result = await updateAccount(admin.id, id, { email: await formField(form, 'email'), role });
+  } else if (action === 'deactivate') {
+    result = await deactivateAccount(admin.id, id);
+  } else if (action === 'reactivate') {
+    result = await reactivateAccount(id);
+  } else if (action === 'reset') {
+    result = await resetCredentials(id);
+  } else if (action === 'resend') {
+    const invitation = await sendInvitation(id);
+    result = invitation.sent
+      ? { ok: true, message: 'Nová pozvánka byla předána k odeslání. Předchozí jednorázové heslo už neplatí.' }
+      : { ok: false, error: `Pozvánku se nepodařilo odeslat: ${invitation.error}` };
+  } else if (action === 'delete') {
+    const target = await findUserById(id).catch(() => undefined);
+    result = await deleteAccount(admin.id, id, await formField(form, 'confirmation'));
+    if (result.ok && target) return Astro.redirect(`/admin/uzivatele?smazano=${encodeURIComponent(target.email)}`, 303);
+  }
+  if (result && !result.ok) Astro.response.status = 422;
+}
+
+const user = isAdmin ? await findUserById(Astro.params.id ?? '').catch(() => undefined) : undefined;
+if (isAdmin && !user) Astro.response.status = 404;
+const responseCount = user ? await countResponses(user.id) : 0;
+const isSelf = user?.id === admin?.id;
+const { model } = await getContent();
+---
+
+<CourseLayout title={user?.email ?? 'Účet'} courseTitle={model?.title} model={model} context={otherContext(model)}>
+  {
+    !isAdmin ? (
+      <Forbidden />
+    ) : !user ? (
+      <div class="admin-page">
+        <AdminNav />
+        <h1>Účet nenalezen</h1>
+        <p>
+          <a href="/admin/uzivatele">Zpět na seznam účtů</a>
+        </p>
+      </div>
+    ) : (
+      <div class="admin-page">
+        <AdminNav />
+        <p>
+          <a href="/admin/uzivatele">← Seznam účtů</a>
+        </p>
+        <h1>{user.email}</h1>
+        {result?.ok && (
+          <p class="notice" role="status">
+            {result.message}
+          </p>
+        )}
+        <FormErrors errors={result && !result.ok ? [result.error] : []} />
+
+        <dl class="facts">
+          <dt>Role</dt>
+          <dd>{roleLabel(user)}</dd>
+          <dt>Účet</dt>
+          <dd>{accountStatusLabel(user)}</dd>
+          <dt>Pozvánka</dt>
+          <dd>{invitationStatusLabel(user)}</dd>
+          <dt>Nutná změna hesla</dt>
+          <dd>{user.mustChangePassword ? 'ano' : 'ne'}</dd>
+          <dt>Vytvořen</dt>
+          <dd>{formatDateTime(user.createdAt)}</dd>
+          <dt>Uložené odpovědi</dt>
+          <dd>
+            {responseCount > 0 ? <a href={`/admin/odpovedi?uzivatel=${user.id}`}>{responseCount}</a> : '0'}
+          </dd>
+        </dl>
+
+        <h2>Údaje</h2>
+        <form method="post" class="form" novalidate>
+          <input type="hidden" name="action" value="update" />
+          <div class="field">
+            <label for="email">E-mail</label>
+            <input id="email" name="email" type="email" value={user.email} required />
+          </div>
+          <div class="field">
+            <label for="role">Role</label>
+            <select id="role" name="role">
+              <option value="learner" selected={user.role === 'learner'}>Studující</option>
+              <option value="admin" selected={user.role === 'admin'}>Administrátor</option>
+            </select>
+          </div>
+          <button type="submit">Uložit změny</button>
+        </form>
+
+        <h2>Přístup</h2>
+        <div class="action-list">
+          {user.status === 'pending' && (
+            <form method="post" data-confirm="Odeslat novou pozvánku? Předchozí jednorázové heslo přestane platit.">
+              <input type="hidden" name="action" value="resend" />
+              <button type="submit">Znovu odeslat pozvánku</button>
+              <p class="hint">Pošle nové jednorázové heslo; předchozí přestane platit.</p>
+            </form>
+          )}
+          {user.status !== 'deactivated' && (
+            <form method="post" data-confirm="Obnovit přístup? Současné heslo přestane platit a uživatel bude odhlášen.">
+              <input type="hidden" name="action" value="reset" />
+              <button type="submit">Obnovit přístup (nové jednorázové heslo)</button>
+              <p class="hint">Zruší současné heslo, odhlásí uživatele a pošle mu nové jednorázové heslo.</p>
+            </form>
+          )}
+          {user.status === 'deactivated' ? (
+            <form method="post">
+              <input type="hidden" name="action" value="reactivate" />
+              <button type="submit">Znovu aktivovat</button>
+            </form>
+          ) : (
+            !isSelf && (
+              <form method="post" data-confirm="Deaktivovat účet? Uživatel bude okamžitě odhlášen.">
+                <input type="hidden" name="action" value="deactivate" />
+                <button type="submit">Deaktivovat</button>
+                <p class="hint">Zablokuje přihlášení a ukončí přístup; uložené odpovědi zůstanou.</p>
+              </form>
+            )
+          )}
+        </div>
+
+        {!isSelf && (
+          <section class="danger-zone" aria-labelledby="delete-heading">
+            <h2 id="delete-heading">Smazání účtu</h2>
+            <p>
+              Smazání je trvalé a odstraní i všechny uložené odpovědi uživatele ({responseCount}).
+              {responseCount > 0 && (
+                <>
+                  {' '}
+                  Před smazáním si je můžete <a href={`/admin/odpovedi/export.md?uzivatel=${user.id}`}>stáhnout jako Markdown</a>.
+                </>
+              )}
+            </p>
+            <form method="post" class="form" novalidate>
+              <input type="hidden" name="action" value="delete" />
+              <div class="field">
+                <label for="confirmation">Pro potvrzení opište e-mail účtu</label>
+                <input id="confirmation" name="confirmation" type="text" autocomplete="off" required />
+              </div>
+              <button type="submit" class="button-danger">Trvale smazat účet</button>
+            </form>
+          </section>
+        )}
+      </div>
+    )
+  }
+</CourseLayout>

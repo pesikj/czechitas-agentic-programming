@@ -1,0 +1,78 @@
+---
+import CourseLayout from '../../../layouts/CourseLayout.astro';
+import AdminNav from '../../../components/AdminNav.astro';
+import AnswerCard from '../../../components/AnswerCard.astro';
+import Forbidden from '../../../components/Forbidden.astro';
+import { otherContext } from '../../../lib/navigation';
+import { getContent } from '../../../server/content/provider';
+import { czechCount } from '../../../server/format';
+import { listResponses, responseFilterOptions } from '../../../server/responses';
+
+const isAdmin = Astro.locals.user?.role === 'admin';
+if (!isAdmin) Astro.response.status = 403;
+
+const userId = Astro.url.searchParams.get('uzivatel') || undefined;
+const exerciseId = Astro.url.searchParams.get('cviceni') || undefined;
+const isUuid = (value: string | undefined) => !value || /^[0-9a-f-]{36}$/i.test(value);
+const records = isAdmin && isUuid(userId) ? await listResponses({ ...(userId ? { userId } : {}), ...(exerciseId ? { exerciseId } : {}) }) : [];
+const options = isAdmin ? await responseFilterOptions() : { learners: [], exercises: [] };
+const { model } = await getContent();
+const exportQuery = new URLSearchParams({ ...(userId ? { uzivatel: userId } : {}), ...(exerciseId ? { cviceni: exerciseId } : {}) }).toString();
+---
+
+<CourseLayout title="Odpovědi" courseTitle={model?.title} model={model} context={otherContext(model)}>
+  {
+    isAdmin ? (
+      <div class="admin-page">
+        <AdminNav />
+        <h1>Odpovědi studujících</h1>
+        <p>Uložené odpovědi na nepovinná cvičení. Uložení neznamená, že byla odpověď přečtena nebo hodnocena.</p>
+
+        <form method="get" class="filter-form" aria-label="Filtrovat odpovědi">
+          <div class="field">
+            <label for="uzivatel">Studující</label>
+            <select id="uzivatel" name="uzivatel">
+              <option value="">všichni</option>
+              {options.learners.map((learner) => (
+                <option value={learner.id} selected={learner.id === userId}>
+                  {learner.email}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div class="field">
+            <label for="cviceni">Cvičení</label>
+            <select id="cviceni" name="cviceni">
+              <option value="">všechna</option>
+              {options.exercises.map((exercise) => (
+                <option value={exercise.id} selected={exercise.id === exerciseId}>
+                  {exercise.title ? `${exercise.title} (${exercise.id})` : exercise.id}
+                </option>
+              ))}
+            </select>
+          </div>
+          <span />
+          <button type="submit">Filtrovat</button>
+        </form>
+
+        {records.length === 0 ? (
+          <p>{userId || exerciseId ? 'Filtru neodpovídá žádná uložená odpověď.' : 'Zatím nikdo neuložil žádnou odpověď.'}</p>
+        ) : (
+          <>
+            <div class="page-actions">
+              <span>{czechCount(records.length, 'odpověď', 'odpovědi', 'odpovědí')}</span>
+              <a href={`/admin/odpovedi/export.md${exportQuery ? `?${exportQuery}` : ''}`} download>
+                Stáhnout jako Markdown
+              </a>
+            </div>
+            {records.map((record) => (
+              <AnswerCard record={record} model={model} learnerEmail={record.email} />
+            ))}
+          </>
+        )}
+      </div>
+    ) : (
+      <Forbidden />
+    )
+  }
+</CourseLayout>

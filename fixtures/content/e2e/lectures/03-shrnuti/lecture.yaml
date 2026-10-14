@@ -1,0 +1,5 @@
+id: shrnuti
+title: Shrnutí
+public: true
+parts:
+  - shrnuti.md

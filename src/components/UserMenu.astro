@@ -1,0 +1,34 @@
+---
+// Signed-in user, administration link and sign-out (a POST form, so links cannot sign users out).
+// Signed-out visitors of public lectures get a sign-in link instead (`signInLink`).
+import { withNext } from '../server/auth/redirect';
+
+interface Props {
+  signInLink?: boolean;
+}
+
+const user = Astro.locals.user;
+const { signInLink = false } = Astro.props;
+---
+
+{
+  user && (
+    <div class="user-menu">
+      <a href="/moje-odpovedi">Moje odpovědi</a>
+      {user.role === 'admin' && <a href="/admin/uzivatele">Administrace</a>}
+      <a href="/zmena-hesla" class="user-email" title="Změnit heslo">
+        {user.email}
+      </a>
+      <form method="post" action="/odhlaseni">
+        <button type="submit">Odhlásit</button>
+      </form>
+    </div>
+  )
+}
+{
+  !user && signInLink && (
+    <div class="user-menu">
+      <a href={withNext('/prihlaseni', Astro.url.pathname)}>Přihlásit se</a>
+    </div>
+  )
+}

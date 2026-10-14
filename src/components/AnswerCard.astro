@@ -1,0 +1,53 @@
+---
+// One saved answer, rendered with the same (sanitized) Markdown dialect as course content.
+import { renderMarkdown } from '../lib/content/index';
+import type { ContentModel } from '../lib/content/types';
+import { partHref } from '../lib/navigation';
+import { formatDateTime } from '../server/format';
+import { revisionNote, type ResponseRecord } from '../server/responses';
+
+interface Props {
+  record: ResponseRecord;
+  model: ContentModel | undefined;
+  learnerEmail?: string;
+  headingLevel?: 2 | 3;
+}
+
+const { record, model, learnerEmail, headingLevel = 2 } = Astro.props;
+const note = revisionNote(record, model);
+const exercise = model?.exercises.get(record.exerciseId);
+const href = exercise ? `${partHref(exercise.lectureId, exercise.partId)}#cviceni-${encodeURIComponent(exercise.id)}` : undefined;
+const location = [record.lectureTitle, record.partTitle].filter(Boolean).join(' › ');
+const name = record.exerciseTitle ?? record.exerciseId;
+const Heading = headingLevel === 2 ? 'h2' : 'h3';
+const fields = await Promise.all(
+  Object.entries(record.fields).map(async ([id, value]) => ({
+    label: record.fieldLabels[id] ?? id,
+    html: value.trim() ? await renderMarkdown(value, { mode: 'response' }) : '',
+  })),
+);
+---
+
+<article class="answer-card">
+  <Heading>{learnerEmail ? `${learnerEmail}: ${name}` : name}</Heading>
+  <p class="meta">
+    {location && <>{location} · </>}uloženo {formatDateTime(record.savedAt)} · cvičení <code>{record.exerciseId}</code>, revize{' '}
+    {record.exerciseRevision}
+    {href && (
+      <>
+        {' '}
+        · <a href={href}>otevřít cvičení</a>
+      </>
+    )}
+  </p>
+  {note === 'older-revision' && <p class="note">Odpověď patří k dřívější verzi cvičení (aktuální revize {exercise?.revision}).</p>}
+  {note === 'removed' && <p class="note">Toto cvičení už v aktuálních materiálech není; odpověď zůstává uložená.</p>}
+  {
+    fields.map((field) => (
+      <div class="answer-field">
+        <h4>{field.label}</h4>
+        {field.html ? <div class="prose" set:html={field.html} /> : <p class="meta">(nevyplněno)</p>}
+      </div>
+    ))
+  }
+</article>

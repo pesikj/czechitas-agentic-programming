@@ -1,0 +1,189 @@
+---
+import CourseLayout from '../../../layouts/CourseLayout.astro';
+import AdminNav from '../../../components/AdminNav.astro';
+import Forbidden from '../../../components/Forbidden.astro';
+import { createAccounts, searchUsers, type BulkEntryResult, type Role, type User } from '../../../server/auth/accounts';
+import { formField } from '../../../server/auth/request';
+import { accountStatusLabel, invitationStatusLabel, roleLabel } from '../../../server/admin-labels';
+import { otherContext } from '../../../lib/navigation';
+import { getContent } from '../../../server/content/provider';
+import { czechCount } from '../../../server/format';
+
+const admin = Astro.locals.user;
+const isAdmin = admin?.role === 'admin';
+if (!isAdmin) Astro.response.status = 403;
+
+let results: BulkEntryResult[] = [];
+let listText = '';
+let formError = '';
+if (isAdmin && Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  listText = await formField(form, 'emails');
+  const role: Role = (await formField(form, 'role')) === 'admin' ? 'admin' : 'learner';
+  results = await createAccounts(listText, role);
+  if (results.length === 0) {
+    formError = 'Zadejte alespoň jednu e-mailovou adresu.';
+    Astro.response.status = 422;
+  }
+  // Keep only the entries that still need attention in the box.
+  listText = results.filter((result) => result.outcome !== 'created').map((result) => result.email).join('\n');
+}
+
+const params = Astro.url.searchParams;
+const query = params.get('q')?.trim() ?? '';
+const status = (['pending', 'active', 'deactivated'] as const).find((value) => value === params.get('stav'));
+const role = (['learner', 'admin'] as const).find((value) => value === params.get('role'));
+const users: User[] = isAdmin ? await searchUsers({ query, ...(status ? { status } : {}), ...(role ? { role } : {}) }) : [];
+const filtered = Boolean(query || status || role);
+// Only the address comes from the URL; the sentence is ours, so a link cannot show arbitrary text.
+const deletedEmail = params.get('smazano')?.slice(0, 254);
+const deletedMessage = deletedEmail ? `Účet ${deletedEmail} a jeho uložené odpovědi byly trvale smazány.` : undefined;
+const { model } = await getContent();
+
+const outcomeLabel: Record<BulkEntryResult['outcome'], string> = {
+  created: 'vytvořen',
+  'invalid-email': 'neplatná adresa',
+  duplicate: 'účet už existuje',
+  repeated: 'v seznamu vícekrát',
+};
+const created = results.filter((result) => result.outcome === 'created');
+const failedInvitations = created.filter((result) => result.outcome === 'created' && !result.invitation.sent);
+---
+
+<CourseLayout title="Uživatelé" courseTitle={model?.title} model={model} context={otherContext(model)}>
+  {
+    isAdmin ? (
+      <div class="admin-page">
+        <AdminNav />
+        <h1>Uživatelé</h1>
+        {deletedMessage && (
+          <p class="notice" role="status">
+            {deletedMessage}
+          </p>
+        )}
+
+        {results.length > 0 && (
+          <section class="notice" role="status" aria-labelledby="results-heading">
+            <h2 id="results-heading">
+              Výsledek: {czechCount(created.length, 'účet vytvořen', 'účty vytvořeny', 'účtů vytvořeno')} z{' '}
+              {results.length}
+              {failedInvitations.length > 0 && `, ${czechCount(failedInvitations.length, 'pozvánka neodeslána', 'pozvánky neodeslány', 'pozvánek neodesláno')}`}
+            </h2>
+            <div class="table-wrap" tabindex="0" role="region" aria-label="Výsledek vytvoření účtů">
+              <table class="users-table">
+                <thead>
+                  <tr>
+                    <th scope="col">E-mail</th>
+                    <th scope="col">Účet</th>
+                    <th scope="col">Pozvánka</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((result) => (
+                    <tr>
+                      <td>{result.email}</td>
+                      <td class={result.outcome === 'created' ? undefined : 'failed'}>{outcomeLabel[result.outcome]}</td>
+                      <td class={result.outcome === 'created' && !result.invitation.sent ? 'failed wrap' : 'wrap'}>
+                        {result.outcome !== 'created'
+                          ? '—'
+                          : result.invitation.sent
+                            ? 'předána k odeslání'
+                            : `selhalo: ${result.invitation.error}`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        <h2>Nové účty</h2>
+        <p>
+          Každý nový uživatel dostane e-mailem pozvánku s jednorázovým heslem. Odeslání pozvánky neznamená, že ji uživatel
+          obdržel. Neplatné a duplicitní adresy nebrání vytvoření ostatních.
+        </p>
+        {formError && (
+          <div class="form-errors" role="alert">
+            <p>{formError}</p>
+          </div>
+        )}
+        <form method="post" class="form bulk-form" data-busy-label="Vytvářím účty…" novalidate>
+          <div class="field">
+            <label for="emails">E-maily</label>
+            <span class="hint" id="emails-hint">Jeden nebo více, oddělené novým řádkem, čárkou nebo mezerou.</span>
+            <textarea id="emails" name="emails" rows="5" aria-describedby="emails-hint" required>{listText}</textarea>
+          </div>
+          <div class="field">
+            <label for="role">Role</label>
+            <select id="role" name="role">
+              <option value="learner">Studující</option>
+              <option value="admin">Administrátor</option>
+            </select>
+          </div>
+          <button type="submit">Vytvořit a pozvat</button>
+        </form>
+
+        <h2>Účty</h2>
+        <form method="get" class="filter-form" role="search" aria-label="Hledat účty">
+          <div class="field">
+            <label for="q">Hledat e-mail</label>
+            <input id="q" name="q" type="search" value={query} />
+          </div>
+          <div class="field">
+            <label for="stav">Stav</label>
+            <select id="stav" name="stav">
+              <option value="">všechny</option>
+              <option value="pending" selected={status === 'pending'}>čeká na aktivaci</option>
+              <option value="active" selected={status === 'active'}>aktivní</option>
+              <option value="deactivated" selected={status === 'deactivated'}>deaktivované</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="role-filter">Role</label>
+            <select id="role-filter" name="role">
+              <option value="">všechny</option>
+              <option value="learner" selected={role === 'learner'}>studující</option>
+              <option value="admin" selected={role === 'admin'}>administrátoři</option>
+            </select>
+          </div>
+          <button type="submit">Filtrovat</button>
+        </form>
+
+        {users.length === 0 ? (
+          <p>{filtered ? 'Filtru neodpovídá žádný účet.' : 'Zatím tu nejsou žádné účty.'}</p>
+        ) : (
+          <div class="table-wrap" tabindex="0" role="region" aria-label="Seznam účtů">
+            <table class="users-table">
+              <caption class="visually-hidden">{czechCount(users.length, 'účet', 'účty', 'účtů')}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">E-mail</th>
+                  <th scope="col">Role</th>
+                  <th scope="col">Účet</th>
+                  <th scope="col">Pozvánka</th>
+                  <th scope="col">Nutná změna hesla</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr>
+                    <td>
+                      <a href={`/admin/uzivatele/${user.id}`}>{user.email}</a>
+                    </td>
+                    <td>{roleLabel(user)}</td>
+                    <td>{accountStatusLabel(user)}</td>
+                    <td class={user.invitationStatus === 'failed' ? 'failed' : undefined}>{invitationStatusLabel(user)}</td>
+                    <td>{user.mustChangePassword ? 'ano' : 'ne'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    ) : (
+      <Forbidden />
+    )
+  }
+</CourseLayout>

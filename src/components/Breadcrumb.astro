@@ -1,0 +1,30 @@
+---
+// Working-directory style location: ~/kurz/<lecture>/<NN-part>
+export interface Crumb {
+  label: string;
+  href?: string;
+}
+
+interface Props {
+  crumbs: Crumb[];
+}
+
+const { crumbs } = Astro.props;
+const all: Crumb[] = [{ label: '~/kurz', href: '/' }, ...crumbs];
+---
+
+<nav class="cwd" aria-label="Umístění">
+  <ol>
+    {
+      all.map((crumb, index) => (
+        <li>
+          {index === all.length - 1 ? (
+            <span aria-current="page">{crumb.label}</span>
+          ) : (
+            <a href={crumb.href}>{crumb.label}</a>
+          )}
+        </li>
+      ))
+    }
+  </ol>
+</nav>

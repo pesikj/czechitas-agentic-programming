@@ -1,0 +1,24 @@
+---
+interface Props {
+  errors: string[];
+  id?: string;
+}
+
+const { errors, id = 'form-errors' } = Astro.props;
+---
+
+{
+  errors.length > 0 && (
+    <div class="form-errors" role="alert" id={id}>
+      {errors.length === 1 ? (
+        <p>{errors[0]}</p>
+      ) : (
+        <ul>
+          {errors.map((error) => (
+            <li>{error}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}

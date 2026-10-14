@@ -1,0 +1,39 @@
+---
+import type { CommandContext } from '../lib/commands';
+
+interface Props {
+  context: Extract<CommandContext, { page: 'part' }>;
+}
+
+const { context } = Astro.props;
+---
+
+<nav class="pager" aria-label="Navigace mezi částmi">
+  {
+    context.previous ? (
+      <a rel="prev" href={context.previous.href}>
+        ← Předchozí část: {context.previous.title}
+      </a>
+    ) : context.previousLecture ? (
+      <a href={context.previousLecture.href}>← Předchozí lekce: {context.previousLecture.title}</a>
+    ) : (
+      <span class="boundary">Jste na začátku lekce.</span>
+    )
+  }
+  {
+    context.next ? (
+      <a rel="next" class="pager-next" href={context.next.href}>
+        Další část: {context.next.title} →
+      </a>
+    ) : (
+      <span class="pager-next">
+        <span class="boundary">Konec lekce.&nbsp;</span>
+        {context.nextLecture ? (
+          <a href={context.nextLecture.href}>Další lekce: {context.nextLecture.title} →</a>
+        ) : (
+          <a href="/">Zpět na přehled lekcí</a>
+        )}
+      </span>
+    )
+  }
+</nav>

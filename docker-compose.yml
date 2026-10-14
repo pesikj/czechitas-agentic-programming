@@ -1,0 +1,24 @@
+# Development services only. The production compose file is part of milestone 7.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: course
+      POSTGRES_PASSWORD: course
+      POSTGRES_DB: course
+    ports:
+      - "5442:5432" # 5442 on the host avoids clashing with other local Postgres instances
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  mailpit:
+    image: axllent/mailpit
+    environment:
+      # Skip the reverse-DNS lookup of SMTP clients; inside Docker it delays every greeting by ~8 s.
+      MP_SMTP_DISABLE_RDNS: "true"
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # web UI (test mailbox)
+
+volumes:
+  postgres-data:

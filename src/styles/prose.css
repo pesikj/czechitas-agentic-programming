@@ -1,0 +1,292 @@
+/* Reading styles for lecture text. Scoped to .prose so WebTUI's terminal look stays in the chrome. */
+
+.prose {
+  max-width: var(--content-width);
+  font-family: var(--font-prose);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  color: var(--foreground0);
+}
+
+.prose :is(p, li, blockquote, dd, td, th) {
+  font-family: var(--font-prose);
+  font-size: inherit;
+  line-height: inherit;
+  color: var(--foreground0);
+}
+
+.prose > * + * {
+  margin-top: 0.9em;
+}
+
+.prose :is(h2, h3, h4, h5, h6) {
+  font-family: var(--font-family);
+  line-height: 1.3;
+  margin-top: 1.6em;
+}
+
+.prose h2 {
+  font-size: 1.3rem;
+}
+
+.prose h3 {
+  font-size: 1.1rem;
+}
+
+.prose :is(h4, h5, h6) {
+  font-size: 1rem;
+}
+
+.prose :is(ul, ol) {
+  padding-left: 1.5em;
+  list-style-position: outside;
+}
+
+.prose ul {
+  list-style-type: disc;
+}
+
+.prose ol {
+  list-style-type: decimal;
+}
+
+.prose li::before {
+  content: none;
+}
+
+.prose li + li,
+.prose li > :is(ul, ol) {
+  margin-top: 0.3em;
+}
+
+.prose li > ol {
+  margin-left: 0;
+}
+
+.prose .contains-task-list {
+  list-style: none;
+  padding-left: 0.25em;
+}
+
+.prose .task-list-item input {
+  margin-right: 0.5em;
+  min-width: 0;
+}
+
+.prose blockquote {
+  border-left: 4px solid var(--background3);
+  padding: 0.25em 0 0.25em 1em;
+  color: var(--foreground1);
+}
+
+.prose blockquote::before {
+  content: none;
+}
+
+.prose :not(pre) > code {
+  font-family: var(--font-family);
+  font-size: 0.9em;
+  background: var(--background1);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
+
+.prose a {
+  color: var(--accent);
+}
+
+.prose img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--background2);
+  background: #fff;
+}
+
+.prose a:has(> img) {
+  display: inline-block;
+  max-width: 100%;
+  cursor: zoom-in;
+}
+
+.prose .image-missing {
+  display: inline-block;
+  padding: 0.5em 1em;
+  border: 2px dashed var(--warning);
+  color: var(--warning);
+  font-family: var(--font-family);
+  font-style: normal;
+}
+
+/* Tables scroll inside their own box, never the page. */
+.prose table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+/* WebTUI draws table dividers with pseudo-elements; prose tables use real borders instead. */
+.prose table :is(tr, th, td)::before,
+.prose table :is(tr, th, td)::after {
+  content: none;
+}
+
+.prose :is(th, td) {
+  border: 1px solid var(--background3);
+  padding: 0.4em 0.8em;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: normal;
+}
+
+.prose th {
+  background: var(--background1);
+}
+
+/* ---------- Code blocks ---------- */
+
+.prose .code-block {
+  position: relative;
+  border: 2px solid var(--background2);
+  background: var(--background1);
+}
+
+.prose .code-block[data-kind='terminal'] {
+  border-color: var(--foreground2);
+}
+
+.prose .code-block[data-kind='prompt'] {
+  border-color: var(--accent);
+  border-style: dashed;
+}
+
+.prose .code-block[data-kind='output'] {
+  background: transparent;
+  border-style: dotted;
+}
+
+.prose .code-label {
+  display: block;
+  padding: 0.2em 1ch;
+  font-family: var(--font-family);
+  font-style: normal;
+  font-size: 0.85rem;
+  color: var(--foreground2);
+  border-bottom: 1px solid var(--background2);
+}
+
+.prose .code-block[data-kind='terminal'] .code-label::before {
+  content: '$ ';
+}
+
+.prose .code-block[data-kind='prompt'] .code-label::before {
+  content: '› ';
+}
+
+.prose pre {
+  margin: 0;
+  padding: 0.75em 1ch;
+  overflow-x: auto;
+  font-family: var(--font-family);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.prose pre code {
+  font-family: inherit;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.prose .code-block[data-kind='prompt'] pre code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.prose .copy-button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-height: 32px;
+  padding: 0 1ch;
+  font-size: 0.85rem;
+  background: var(--background2);
+  color: var(--foreground0);
+}
+
+.prose .code-block:not(:has(.code-label)) pre {
+  padding-right: 14ch;
+}
+
+/* ---------- Alternatives ---------- */
+
+.prose .alternatives {
+  border: 2px solid var(--background2);
+  padding: 0.75em 2ch;
+}
+
+.prose .alternative + .alternative {
+  margin-top: 1em;
+  padding-top: 1em;
+  border-top: 1px dashed var(--background3);
+}
+
+.prose .alternative > * + * {
+  margin-top: 0.75em;
+}
+
+.prose .alternative-label {
+  font-family: var(--font-family);
+}
+
+.prose .alternatives.tabs-ready {
+  padding-top: 0;
+}
+
+.prose .alternatives.tabs-ready .alternative {
+  margin: 0;
+  padding: 0.75em 0 0;
+  border: none;
+}
+
+.prose .alternatives.tabs-ready .alternative-label {
+  display: none;
+}
+
+.prose .alt-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.5ch;
+  margin: 0 -2ch;
+  border-bottom: 2px solid var(--background2);
+}
+
+.prose .alt-tabs button {
+  min-height: 40px;
+  padding: 0 2ch;
+  background: transparent;
+  color: var(--foreground1);
+  border-bottom: 3px solid transparent;
+  font-family: var(--font-family);
+}
+
+.prose .alt-tabs button[aria-selected='true'] {
+  color: var(--foreground0);
+  font-weight: var(--font-weight-bold);
+  border-bottom-color: var(--accent);
+  text-decoration: none;
+}
+
+/* ---------- Footnotes ---------- */
+
+.prose .footnotes {
+  margin-top: 2em;
+  font-size: 0.9em;
+  border-top: 1px solid var(--background2);
+}
+
+/* Application panels placed inside the prose (exercises) keep their own spacing. */
+.prose .exercise-panel h2 {
+  margin-top: 0;
+}

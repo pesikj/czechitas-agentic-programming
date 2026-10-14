@@ -1,0 +1,146 @@
+---
+import CourseLayout from '../../layouts/CourseLayout.astro';
+import AdminNav from '../../components/AdminNav.astro';
+import Forbidden from '../../components/Forbidden.astro';
+import { otherContext } from '../../lib/navigation';
+import { getConfig } from '../../server/config';
+import { getContent } from '../../server/content/provider';
+import { getActiveRevision, listRevisionRuns, publishContent, type PublishResult } from '../../server/content/publish';
+import { czechCount, formatDateTime, shortSha } from '../../server/format';
+
+const admin = Astro.locals.user;
+const isAdmin = admin?.role === 'admin';
+if (!isAdmin) Astro.response.status = 403;
+
+let result: PublishResult | undefined;
+if (isAdmin && Astro.request.method === 'POST') {
+  result = await publishContent(admin.id);
+  if (result.status === 'busy') Astro.response.status = 409;
+  if (result.status === 'failed') Astro.response.status = 422;
+}
+
+const config = getConfig();
+const preview = Boolean(config.CONTENT_DIR);
+const active = isAdmin ? await getActiveRevision() : undefined;
+const runs = isAdmin ? await listRevisionRuns(10) : [];
+const inProgress = runs.find((run) => run.status === 'pending' || run.status === 'validating');
+const lastFailed = runs[0]?.status === 'failed' ? runs[0] : undefined;
+const shownIssues = result && result.status !== 'busy' ? result.revision.issues : lastFailed ? lastFailed.issues : (active?.issues ?? []);
+const content = await getContent();
+const statusLabel: Record<string, string> = {
+  pending: 'čeká',
+  validating: 'probíhá kontrola',
+  ready: 'připraveno',
+  failed: 'selhalo',
+  active: 'aktivní',
+  superseded: 'nahrazeno',
+};
+---
+
+<CourseLayout title="Obsah" courseTitle={content.model?.title} model={content.model} context={otherContext(content.model)}>
+  {
+    isAdmin ? (
+      <div class="admin-page">
+        <AdminNav />
+        <h1>Obsah kurzu</h1>
+
+        {result?.status === 'activated' && (
+          <div class="notice" role="status">
+            <p>
+              {result.unchanged
+                ? `Obsah je aktuální: revize ${shortSha(result.revision.commitSha)} se od poslední aktualizace nezměnila.`
+                : `Zveřejněna revize ${shortSha(result.revision.commitSha)}. Všichni studující nyní vidí novou verzi.`}
+            </p>
+          </div>
+        )}
+        {result?.status === 'failed' && (
+          <div class="form-errors" role="alert">
+            <p>Aktualizace se nezdařila: {result.message}</p>
+            <p>{active ? `Studující dál vidí revizi ${shortSha(active.commitSha)}.` : 'Zatím není zveřejněna žádná verze obsahu.'}</p>
+          </div>
+        )}
+        {result?.status === 'busy' && (
+          <div class="form-errors" role="alert">
+            <p>Jiná aktualizace právě probíhá. Počkejte na její dokončení a stránku obnovte.</p>
+          </div>
+        )}
+
+        {preview && (
+          <p class="notice">
+            Náhledový režim: obsah se čte přímo z adresáře <code>{config.CONTENT_DIR}</code> (proměnná CONTENT_DIR), ne ze
+            zveřejněné revize. V provozu tuto proměnnou nenastavujte.
+          </p>
+        )}
+
+        <dl class="facts">
+          <dt>Repozitář</dt>
+          <dd>
+            <code>{config.CONTENT_REPO_URL}</code>, větev <code>{config.CONTENT_BRANCH}</code>
+          </dd>
+          <dt>Zveřejněná revize</dt>
+          <dd>{active ? <code>{shortSha(active.commitSha)}</code> : 'zatím žádná'}</dd>
+          <dt>Poslední úspěšná aktualizace</dt>
+          <dd>{formatDateTime(active?.activatedAt)}</dd>
+          <dt>Stav</dt>
+          <dd>{inProgress ? `probíhá aktualizace (od ${formatDateTime(inProgress.startedAt)})` : 'žádná aktualizace neprobíhá'}</dd>
+        </dl>
+
+        <form method="post" class="publish-form" data-busy-label="Aktualizuji…">
+          <p>
+            Stáhne nejnovější verzi z repozitáře, zkontroluje ji a teprve potom ji zveřejní. Když kontrola selže, zůstane
+            zveřejněná dosavadní verze.
+          </p>
+          <button type="submit" class="button-primary" disabled={Boolean(inProgress)}>
+            Aktualizovat obsah
+          </button>
+        </form>
+
+        {shownIssues.length > 0 && (
+          <section aria-labelledby="issues-heading">
+            <h2 id="issues-heading">Zjištěné problémy ({czechCount(shownIssues.length, 'položka', 'položky', 'položek')})</h2>
+            <ul class="issues">
+              {shownIssues.map((issue) => (
+                <li class={issue.severity}>
+                  {issue.severity === 'error' ? 'CHYBA' : 'VAROVÁNÍ'} {issue.file}
+                  {issue.line !== undefined ? `:${issue.line}` : ''} [{issue.code}] {issue.message}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <h2>Poslední aktualizace</h2>
+        {runs.length === 0 ? (
+          <p>Obsah zatím nebyl aktualizován.</p>
+        ) : (
+          <div class="table-wrap" tabindex="0" role="region" aria-label="Poslední aktualizace">
+            <table class="users-table">
+              <thead>
+                <tr>
+                  <th scope="col">Spuštěno</th>
+                  <th scope="col">Revize</th>
+                  <th scope="col">Stav</th>
+                  <th scope="col">Podrobnosti</th>
+                </tr>
+              </thead>
+              <tbody>
+                {runs.map((run) => (
+                  <tr>
+                    <td>{formatDateTime(run.startedAt)}</td>
+                    <td>
+                      <code>{shortSha(run.commitSha)}</code>
+                    </td>
+                    <td class={run.status === 'failed' ? 'failed' : undefined}>{statusLabel[run.status]}</td>
+                    <td class="wrap">{run.errorMessage ?? (run.issues.length > 0 ? czechCount(run.issues.length, 'varování', 'varování', 'varování') : '')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    ) : (
+      <Forbidden />
+    )
+  }
+</CourseLayout>

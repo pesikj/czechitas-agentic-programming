@@ -1,0 +1,43 @@
+---
+// Shown when there is no usable content: nothing published yet, or (preview mode) invalid content.
+import type { ValidationIssue } from '../lib/content/types';
+
+interface Props {
+  issues: ValidationIssue[];
+  empty?: boolean;
+}
+
+const { issues, empty = false } = Astro.props;
+const isAdmin = Astro.locals.user?.role === 'admin';
+// The title page is public: visitors are not shown the repository's errors.
+const signedIn = Boolean(Astro.locals.user);
+---
+
+{
+  empty ? (
+    <div class="message-page">
+      <h1>Materiály zatím nejsou k dispozici</h1>
+      <p>Obsah kurzu ještě nebyl zveřejněn. Zkuste to prosím později.</p>
+      {isAdmin && (
+        <p>
+          <a href="/admin/obsah">Zveřejnit obsah v administraci</a>
+        </p>
+      )}
+    </div>
+  ) : (
+    <div class="message-page">
+      <h1>Obsah kurzu nelze načíst</h1>
+      <p>Obsahový repozitář obsahuje chyby. Opravte je a stránku obnovte.</p>
+      {signedIn && (
+        <ul class="issues">
+          {issues.map((issue) => (
+            <li class={issue.severity}>
+              {issue.severity === 'error' ? 'CHYBA' : 'VAROVÁNÍ'} {issue.file}
+              {issue.line !== undefined ? `:${issue.line}` : ''} [{issue.code}] {issue.message}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}

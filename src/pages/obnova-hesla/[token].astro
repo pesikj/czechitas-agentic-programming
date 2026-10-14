@@ -1,0 +1,65 @@
+---
+import AuthLayout from '../../layouts/AuthLayout.astro';
+import FormErrors from '../../components/FormErrors.astro';
+import { findResetTarget, resetPassword } from '../../server/auth/accounts';
+import { PASSWORD_MIN_LENGTH } from '../../server/auth/password';
+import { formField } from '../../server/auth/request';
+import { sessionCookieName } from '../../server/auth/sessions';
+
+const token = Astro.params.token ?? '';
+let errors: string[] = [];
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const result = await resetPassword(token, await formField(form, 'password'), await formField(form, 'confirmation'));
+  if (result.ok) {
+    Astro.cookies.delete(sessionCookieName(), { path: '/' });
+    return Astro.redirect('/prihlaseni?heslo-obnoveno=1', 303);
+  }
+  errors = result.errors;
+  Astro.response.status = 422;
+}
+const user = await findResetTarget(token);
+if (!user) Astro.response.status = 410;
+---
+
+<AuthLayout title="Nové heslo">
+  {
+    user ? (
+      <>
+        <FormErrors errors={errors} />
+        <form method="post" class="form" novalidate>
+          <input type="hidden" name="username" autocomplete="username" value={user.email} />
+          <p>Nastavte nové heslo pro účet {user.email}.</p>
+          <div class="field">
+            <label for="password">Nové heslo</label>
+            <span class="hint" id="password-rules">
+              Alespoň {PASSWORD_MIN_LENGTH} znaků. Dobře funguje několik nesouvisejících slov.
+            </span>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="new-password"
+              required
+              aria-describedby="password-rules"
+              aria-invalid={errors.length > 0 ? 'true' : undefined}
+            />
+          </div>
+          <div class="field">
+            <label for="confirmation">Nové heslo znovu</label>
+            <input id="confirmation" name="confirmation" type="password" autocomplete="new-password" required />
+          </div>
+          <button type="submit">Uložit heslo</button>
+        </form>
+      </>
+    ) : (
+      <>
+        <p class="notice" role="status">Odkaz pro obnovení hesla už neplatí. Mohl vypršet nebo už byl použit.</p>
+        <div class="secondary-links">
+          <a href="/zapomenute-heslo">Poslat nový odkaz</a>
+          <a href="/prihlaseni">Přihlásit se</a>
+        </div>
+      </>
+    )
+  }
+</AuthLayout>

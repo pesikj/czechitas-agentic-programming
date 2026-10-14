@@ -1,0 +1,9 @@
+# Vzorový obsah podle obsahové smlouvy (content contract).
+# Jde o zástupný obsah pro vývoj webu, ne o sylabus kurzu.
+title: Agentní programování s Codex CLI a Claude Code
+toc:
+  - title: Začínáme
+    items:
+      - lecture: 01-uvod
+      - lecture: 02-prompty
+  - lecture: 03-shrnuti

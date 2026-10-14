@@ -1,0 +1,105 @@
+---
+import AuthLayout from '../layouts/AuthLayout.astro';
+import FormErrors from '../components/FormErrors.astro';
+import { signIn, normaliseEmail } from '../server/auth/accounts';
+import { signInByAccount, signInByAddress } from '../server/auth/rate-limit';
+import { safeNext, withNext } from '../server/auth/redirect';
+import { clientAddress, formField } from '../server/auth/request';
+import { sessionCookieName, sessionCookieOptions } from '../server/auth/sessions';
+import { getConfig } from '../server/config';
+import { getContent } from '../server/content/provider';
+import { publicModel } from '../lib/content/visibility';
+import { lectureHref } from '../lib/navigation';
+
+const next = safeNext(Astro.url.searchParams.get('next'));
+if (Astro.locals.user && Astro.request.method === 'GET') {
+  return Astro.redirect(Astro.locals.user.mustChangePassword ? withNext('/zmena-hesla', next) : next, 303);
+}
+
+let errors: string[] = [];
+let email = '';
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  email = normaliseEmail(await formField(form, 'email'));
+  const secret = await formField(form, 'password');
+  const target = safeNext(await formField(form, 'next'));
+  const address = clientAddress(Astro);
+
+  if (!signInByAccount.hit(`${email}|${address}`) || !signInByAddress.hit(address)) {
+    errors = ['Příliš mnoho pokusů o přihlášení. Zkuste to prosím znovu za 15 minut.'];
+    Astro.response.status = 429;
+  } else {
+    const result = await signIn(email, secret);
+    if (result.ok) {
+      signInByAccount.reset(`${email}|${address}`);
+      Astro.cookies.set(sessionCookieName(), result.token, sessionCookieOptions(result.expiresAt));
+      return Astro.redirect(result.user.mustChangePassword ? withNext('/zmena-hesla', target) : target, 303);
+    }
+    errors = ['Nesprávný e-mail nebo heslo.'];
+    Astro.response.status = 401;
+  }
+}
+
+const notice = Astro.url.searchParams.has('odhlaseno')
+  ? 'Byli jste odhlášeni.'
+  : Astro.url.searchParams.has('heslo-obnoveno')
+    ? 'Heslo bylo změněno. Přihlaste se novým heslem.'
+    : undefined;
+const support = getConfig().SUPPORT_EMAIL;
+// Lectures readable without an account, e.g. tool installation before the course starts.
+const { model } = await getContent().catch(() => ({ model: undefined }));
+const publicLectures = model ? publicModel(model).lectures : [];
+---
+
+<AuthLayout title="Přihlášení">
+  {notice && <p class="notice" role="status">{notice}</p>}
+  <FormErrors errors={errors} />
+  <form method="post" class="form" novalidate>
+    <input type="hidden" name="next" value={next} />
+    <div class="field">
+      <label for="email">E-mail</label>
+      <input
+        id="email"
+        name="email"
+        type="email"
+        autocomplete="username"
+        required
+        value={email}
+        aria-invalid={errors.length > 0 ? 'true' : undefined}
+        aria-describedby={errors.length > 0 ? 'form-errors' : undefined}
+      />
+    </div>
+    <div class="field">
+      <label for="password">Heslo</label>
+      <span class="hint" id="password-hint">Při prvním přihlášení zadejte jednorázové heslo z pozvánky.</span>
+      <input
+        id="password"
+        name="password"
+        type="password"
+        autocomplete="current-password"
+        required
+        aria-describedby="password-hint"
+        aria-invalid={errors.length > 0 ? 'true' : undefined}
+      />
+    </div>
+    <button type="submit">Přihlásit se</button>
+  </form>
+  <div class="secondary-links">
+    <a href="/zapomenute-heslo">Zapomenuté heslo</a>
+    <a href={`mailto:${support}`}>Potřebuji pomoc</a>
+  </div>
+  {
+    publicLectures.length > 0 && (
+      <section class="public-lectures" aria-labelledby="public-lectures-title">
+        <h2 id="public-lectures-title">Bez přihlášení</h2>
+        <ul>
+          {publicLectures.map((lecture) => (
+            <li>
+              <a href={lectureHref(lecture)}>{lecture.title}</a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
+</AuthLayout>

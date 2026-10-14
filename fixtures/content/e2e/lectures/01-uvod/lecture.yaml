@@ -1,0 +1,7 @@
+id: uvod-do-agentu
+title: Úvod do agentního programování
+parts:
+  - 01-co-je-agent.md
+  - 02-instalace.md
+  - 03-prvni-prompt.md
+  - 04-cviceni.md
