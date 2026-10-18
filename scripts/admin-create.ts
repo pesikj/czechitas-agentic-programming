@@ -25,9 +25,9 @@ if (result.created) {
 }
 
 if (invitation.sent) {
-  console.log('Invitation accepted by the SMTP server. Any earlier one-time password no longer works.');
+  console.log('Invitation accepted by the email service. Any earlier one-time password no longer works.');
   process.exit(0);
 }
 console.error(`Invitation NOT sent: ${invitation.error}`);
-console.error('Fix the SMTP settings in .env and run this command again.');
+console.error('Fix the email settings (BREVO_API_KEY or SMTP_*) and run this command again.');
 process.exit(1);
