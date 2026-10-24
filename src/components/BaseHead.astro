@@ -17,3 +17,6 @@ const { title } = Astro.props;
 <title>{title}</title>
 <!-- Synchronous on purpose: applies the theme before first paint. -->
 <script is:inline src="/theme-init.js"></script>
+<script>
+  import '../scripts/links';
+</script>
