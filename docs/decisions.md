@@ -18,7 +18,7 @@ Milestone 1 of `roadmap.md`, decided on 3 October 2026. Requirements come from `
 
 ## Content source and storage
 
-- The source is a git repository configured by `CONTENT_REPO_URL` and `CONTENT_BRANCH`. In development this is the sibling checkout `../czechitas-agentic-programming-content` on `main`.
+- The source is a git repository configured by `CONTENT_REPO_URL` and `CONTENT_BRANCH`; a private repository is read with the token in `CONTENT_REPO_TOKEN`, which git receives as an HTTP header through its environment (never in the URL, arguments or messages). In development this is the sibling checkout `../czechitas-agentic-programming-content` on `main`.
 - **Aktualizovat obsah** (milestone 4) fetches the branch into a temporary directory, validates it with `loadContent()`, prepares navigation, pages, images and search, stores the result in the database and switches the active revision in one step. The temporary directory is removed afterwards; the server keeps no content on disk.
 - Published content is stored in the database (`content_snapshots`, `content_assets`) and served only through authenticated routes. Protected content never appears in public build output.
 - Content is never fetched on a schedule, on a repository event or on a page visit.

@@ -13,11 +13,22 @@ const run = promisify(execFile);
 export interface RepositorySettings {
   url: string;
   branch: string;
+  /** Access token for a private repository fetched over HTTPS (e.g. a GitHub token). */
+  token?: string;
 }
 
 export function repositorySettings(): RepositorySettings {
   const config = getConfig();
-  return { url: config.CONTENT_REPO_URL, branch: config.CONTENT_BRANCH };
+  return {
+    url: config.CONTENT_REPO_URL,
+    branch: config.CONTENT_BRANCH,
+    ...(config.CONTENT_REPO_TOKEN ? { token: config.CONTENT_REPO_TOKEN } : {}),
+  };
+}
+
+/** The repository URL for display, without any credentials written into it. */
+export function displayRepositoryUrl(url: string): string {
+  return url.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/@\s]*@/i, '$1');
 }
 
 /** Prefix of the temporary checkout directories (under the system temp directory). */
@@ -29,13 +40,39 @@ export class PublishError extends Error {}
 // Never prompt for credentials (the server has no terminal); fail instead.
 const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'true', LC_ALL: 'C' };
 
-async function git(args: string[]): Promise<string> {
-  const { stdout } = await run('git', args, { env: GIT_ENV, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 });
+async function git(args: string[], env: Record<string, string> = {}): Promise<string> {
+  const { stdout } = await run('git', args, { env: { ...GIT_ENV, ...env }, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 });
   return stdout.trim();
+}
+
+const authorization = (token: string) => `Basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`;
+
+/**
+ * Git configuration that sends the token as an HTTP header for the repository's host only. It is
+ * passed in the environment, so it never appears in the URL, command arguments or git's messages
+ * (the same approach as GitHub's actions/checkout).
+ */
+function authEnv(settings: RepositorySettings): Record<string, string> {
+  if (!settings.token) return {};
+  return {
+    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: `http.${new URL(settings.url).origin}/.extraheader`,
+    GIT_CONFIG_VALUE_0: `Authorization: ${authorization(settings.token)}`,
+  };
+}
+
+/** Removes credentials from git's output before it is shown or stored. */
+function redact(text: string, settings: RepositorySettings): string {
+  let clean = displayRepositoryUrl(text).replace(/(\/\/)[^/@\s'"]*@/g, '$1');
+  if (settings.token) clean = clean.replaceAll(settings.token, '***').replaceAll(authorization(settings.token), '***');
+  return clean;
 }
 
 function validate(settings: RepositorySettings): void {
   if (settings.url.startsWith('-')) throw new PublishError('Adresa obsahového repozitáře (CONTENT_REPO_URL) je neplatná.');
+  if (settings.token && !/^https?:\/\//i.test(settings.url)) {
+    throw new PublishError('Token (CONTENT_REPO_TOKEN) funguje jen s adresou repozitáře https://… (CONTENT_REPO_URL).');
+  }
   if (!/^[\w][\w./-]*$/.test(settings.branch) || settings.branch.includes('..')) {
     throw new PublishError(`Název větve „${settings.branch}“ (CONTENT_BRANCH) je neplatný.`);
   }
@@ -79,12 +116,20 @@ export async function checkoutRevision(settings: RepositorySettings, sha?: strin
 async function fetchCommit(mirror: string, settings: RepositorySettings, sha: string | undefined): Promise<string> {
   const ref = `refs/remotes/content/${settings.branch}`;
   try {
-    await git(['--git-dir', mirror, 'fetch', '--quiet', '--force', '--no-tags', '--', settings.url, `+refs/heads/${settings.branch}:${ref}`]);
+    await git(
+      ['--git-dir', mirror, 'fetch', '--quiet', '--force', '--no-tags', '--', settings.url, `+refs/heads/${settings.branch}:${ref}`],
+      authEnv(settings),
+    );
   } catch (error) {
-    const detail = (error as { stderr?: string }).stderr?.trim().split('\n').at(-1) ?? String(error);
+    const detail = redact((error as { stderr?: string }).stderr?.trim().split('\n').at(-1) ?? String(error), settings);
     if (/couldn't find remote ref/i.test(detail)) {
       throw new PublishError(
         `Větev „${settings.branch}“ v obsahovém repozitáři neexistuje nebo nemá žádný commit. (${detail})`,
+      );
+    }
+    if (/authentication failed|could not read username|repository not found|\b40[13]\b/i.test(detail)) {
+      throw new PublishError(
+        `Přístup k obsahovému repozitáři byl odmítnut. U soukromého repozitáře zkontrolujte token v CONTENT_REPO_TOKEN (platnost a oprávnění ke čtení obsahu) a adresu v CONTENT_REPO_URL. (${detail})`,
       );
     }
     throw new PublishError(`Obsahový repozitář se nepodařilo stáhnout. Zkontrolujte adresu a přístup. (${detail})`);
@@ -92,7 +137,7 @@ async function fetchCommit(mirror: string, settings: RepositorySettings, sha: st
   if (!sha) return git(['--git-dir', mirror, 'rev-parse', `${ref}^{commit}`]);
   if (!(await isCommit(mirror, sha))) {
     // No longer on the branch (e.g. after a force push): ask for the commit itself.
-    await git(['--git-dir', mirror, 'fetch', '--quiet', '--no-tags', '--', settings.url, sha]).catch(() => undefined);
+    await git(['--git-dir', mirror, 'fetch', '--quiet', '--no-tags', '--', settings.url, sha], authEnv(settings)).catch(() => undefined);
     if (!(await isCommit(mirror, sha))) throw new PublishError(`Revize ${sha.slice(0, 7)} v obsahovém repozitáři není.`);
   }
   return sha;

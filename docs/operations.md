@@ -14,7 +14,8 @@ Railway provides HTTPS and the reverse proxy. Course content comes from the cont
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`;
    - `APP_BASE_URL` = the `https://` address from step 3;
    - `TRUST_PROXY` = `true`;
-   - `CONTENT_REPO_URL` = `https://x-access-token:<token>@github.com/<org>/<content-repo>.git` with a fine-grained GitHub token limited to the content repository, **Contents: read-only**. Note the token's expiry date: publishing fails once it expires;
+   - `CONTENT_REPO_URL` = `https://github.com/<org>/<content-repo>.git`;
+   - `CONTENT_REPO_TOKEN` = a fine-grained GitHub token limited to the content repository, **Contents: read-only** (GitHub → *Settings → Developer settings → Fine-grained tokens*). Add it as a Railway variable (sealed, if you like); it is sent to GitHub as an HTTP header and never shown in the administration or in error messages. Note the token's expiry date: publishing fails once it expires, and the administration then says to check the token. Not needed for a public content repository;
    - `CONTENT_BRANCH`, `SUPPORT_EMAIL`;
    - **Email:** Railway blocks outgoing SMTP below the Pro plan. Set `BREVO_API_KEY` (Brevo → *SMTP & API → API keys*) and `SMTP_FROM` with a sender verified in Brevo. Set up SPF and DKIM for the sender's domain in Brevo, otherwise invitations end up in spam. (On Pro, the `SMTP_*` settings work as well.)
 
