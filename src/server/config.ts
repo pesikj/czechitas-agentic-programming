@@ -32,6 +32,14 @@ const configSchema = z.object({
   CONTENT_REPO_URL: z.string().min(1),
   CONTENT_BRANCH: z.string().min(1).default('main'),
   /**
+   * Access token for a private content repository fetched over HTTPS, e.g. a fine-grained GitHub
+   * token with read-only access to its contents. Kept out of CONTENT_REPO_URL, so it is never shown.
+   */
+  CONTENT_REPO_TOKEN: z
+    .string()
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+  /**
    * Optional preview mode for authors and tests: read content directly from this directory and
    * skip publishing. Never set in production, where only published revisions are shown.
    */

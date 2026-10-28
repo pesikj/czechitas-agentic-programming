@@ -6,6 +6,7 @@ import { otherContext } from '../../lib/navigation';
 import { getConfig } from '../../server/config';
 import { getContent } from '../../server/content/provider';
 import { getActiveRevision, listRevisionRuns, publishContent, type PublishResult } from '../../server/content/publish';
+import { displayRepositoryUrl } from '../../server/content/repository';
 import { czechCount, formatDateTime, shortSha } from '../../server/format';
 
 const admin = Astro.locals.user;
@@ -75,7 +76,7 @@ const statusLabel: Record<string, string> = {
         <dl class="facts">
           <dt>Repozitář</dt>
           <dd>
-            <code>{config.CONTENT_REPO_URL}</code>, větev <code>{config.CONTENT_BRANCH}</code>
+            <code>{displayRepositoryUrl(config.CONTENT_REPO_URL)}</code>, větev <code>{config.CONTENT_BRANCH}</code>
           </dd>
           <dt>Zveřejněná revize</dt>
           <dd>{active ? <code>{shortSha(active.commitSha)}</code> : 'zatím žádná'}</dd>
