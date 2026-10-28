@@ -43,6 +43,7 @@ parts:
   - 02-instalace.md
 ```
 
+- `title` is shown as written. The site adds no lecture numbers of its own, so number lectures in the title if you want them (`01 – Instalace nástrojů`); leading zeros are dropped on the site (`1 – Instalace nástrojů`).
 - `public` (optional, default `false`): when `true`, anyone can read the lecture, its images and its linked files without an account, and the title page and sign-in page link to it. Use it for material learners need before the course, such as tool installation. Everything else stays sign-in only.
 - `parts` order is the part order (**Část 1 z N**). The paths are relative to the lecture directory and must be `.md` files inside it.
 - A `.md` file in the lecture directory that is not listed is reported as a warning.

@@ -44,6 +44,11 @@ function isFileLink(url: string): boolean {
   return FILE_EXTENSIONS.has(path.posix.extname(stripQuery(url)).toLowerCase());
 }
 
+/** Authored lecture numbers are shown without leading zeros: `01 – Úvod` becomes `1 – Úvod`. */
+function lectureTitle(title: string): string {
+  return title.replace(/^0+(?=\d)/, '');
+}
+
 class Loader {
   readonly issues = new IssueCollector();
   private readonly lectures: Lecture[] = [];
@@ -119,7 +124,7 @@ class Loader {
     }
     this.lectureIds.add(data.id);
 
-    const lecture: Lecture = { id: data.id, title: data.title, public: data.public === true, dir, parts: [] };
+    const lecture: Lecture = { id: data.id, title: lectureTitle(data.title), public: data.public === true, dir, parts: [] };
     const partIds = new Set<string>();
     for (const [index, partFile] of data.parts.entries()) {
       const partLine = parsed.lineOf(['parts', index]);

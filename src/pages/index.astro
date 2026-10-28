@@ -4,7 +4,7 @@ import ContentIssues from '../components/ContentIssues.astro';
 import HelpList from '../components/HelpList.astro';
 import type { Lecture, TocNode } from '../lib/content/types';
 import { visibleModel } from '../lib/content/visibility';
-import { homeContext, lectureHref, lectureNumber } from '../lib/navigation';
+import { homeContext, lectureHref } from '../lib/navigation';
 import { getContent } from '../server/content/provider';
 
 const content = await getContent();
@@ -57,9 +57,6 @@ const items = toItems(model?.toc ?? []);
                   </li>
                 ) : (
                   <li>
-                    <span class="number">
-                      {lectureNumber(model, item.lecture)}
-                    </span>
                     <a href={lectureHref(item.lecture)}>{item.lecture.title}</a>
                     <span class="count">{partCount(item.lecture.parts.length)}</span>
                   </li>
