@@ -1,6 +1,7 @@
 // Mobile navigation drawer and content enhancements.
 import './alternatives';
 import './code-copy';
+import './diagrams';
 import './image-dialog';
 import './forms';
 import './responses';

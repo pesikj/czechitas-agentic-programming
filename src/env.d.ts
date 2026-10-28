@@ -9,3 +9,8 @@ declare namespace App {
     sessionToken?: string;
   }
 }
+
+/** Mermaid's prebuilt browser bundle (src/scripts/diagrams.ts) has the API of the package entry point. */
+declare module 'mermaid/dist/mermaid.esm.min.mjs' {
+  export { default } from 'mermaid';
+}

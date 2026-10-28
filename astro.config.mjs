@@ -7,6 +7,9 @@ export default defineConfig({
   adapter: node({ mode: 'standalone' }),
   // The dev toolbar is not part of the product and adds noise to browser tests.
   devToolbar: { enabled: false },
+  // Diagrams load Mermaid's prebuilt, self-contained browser bundle (src/scripts/diagrams.ts); the
+  // dev server serves it as is instead of re-bundling the whole library on start or first use.
+  vite: { optimizeDeps: { exclude: ['mermaid'] } },
   security: {
     checkOrigin: true,
     // Behind the HTTPS reverse proxy, take the public protocol and host from its X-Forwarded-*
