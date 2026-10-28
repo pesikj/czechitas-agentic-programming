@@ -7,6 +7,7 @@ import { visit } from 'unist-util-visit';
 import { ALTERNATIVES_DIRECTIVE, EXERCISE_LANG, OPTION_DIRECTIVE, parseMarkdown } from './markdown';
 import type { AssetRef, ContentModel, Exercise, Lecture, LoadResult, Part, TocNode } from './types';
 import {
+  FILE_EXTENSIONS,
   IMAGE_EXTENSIONS,
   IssueCollector,
   checkId,
@@ -29,6 +30,18 @@ export async function loadContent(rootDir: string): Promise<LoadResult> {
   const model = await loader.load();
   const issues = loader.issues.issues;
   return loader.issues.hasErrors || !model ? { issues } : { model, issues };
+}
+
+const isExternal = (url: string) => /^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith('//');
+const stripQuery = (url: string) => url.replace(/[?#].*$/, '');
+
+/**
+ * A link to a downloadable repository file: relative, with a supported extension. Other links
+ * (websites, site routes like `/hledat`, anchors, other pages) are left as written.
+ */
+function isFileLink(url: string): boolean {
+  if (isExternal(url) || url.startsWith('/') || url.startsWith('#')) return false;
+  return FILE_EXTENSIONS.has(path.posix.extname(stripQuery(url)).toLowerCase());
 }
 
 class Loader {
@@ -217,29 +230,39 @@ class Loader {
       definitions.set(node.identifier, node);
     });
 
-    const images: { url: string; alt: string | null | undefined; line?: number }[] = [];
+    const refs: { kind: AssetRef['kind']; url: string; alt?: string | null; line?: number }[] = [];
     visit(tree, (node: Nodes) => {
+      const line = node.position?.start.line;
       if (node.type === 'image') {
-        images.push({ url: node.url, alt: node.alt, line: node.position?.start.line });
+        refs.push({ kind: 'image', url: node.url, alt: node.alt, line });
       } else if (node.type === 'imageReference') {
         const definition = definitions.get(node.identifier);
-        if (definition) images.push({ url: definition.url, alt: node.alt, line: node.position?.start.line });
+        if (definition) refs.push({ kind: 'image', url: definition.url, alt: node.alt, line });
+      } else if (node.type === 'link' || node.type === 'linkReference') {
+        const url = node.type === 'link' ? node.url : definitions.get(node.identifier)?.url;
+        if (url !== undefined && isFileLink(url)) refs.push({ kind: 'file', url, line });
       }
     });
 
     const assets: AssetRef[] = [];
-    for (const image of images) {
-      if (!image.alt?.trim()) {
-        this.issues.warning('image-alt-missing', file, `Image "${image.url}" has no alternative text.`, image.line);
+    for (const ref of refs) {
+      if (ref.kind === 'image' && !ref.alt?.trim()) {
+        this.issues.warning('image-alt-missing', file, `Image "${ref.url}" has no alternative text.`, ref.line);
       }
-      const asset = await this.resolveAsset(image.url, file, image.line);
+      const asset = await this.resolveAsset(ref.kind, ref.url, file, ref.line);
       if (asset) assets.push(asset);
     }
     return assets;
   }
 
-  private async resolveAsset(url: string, file: string, line: number | undefined): Promise<AssetRef | undefined> {
-    if (/^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith('//')) {
+  private async resolveAsset(
+    kind: AssetRef['kind'],
+    url: string,
+    file: string,
+    line: number | undefined,
+  ): Promise<AssetRef | undefined> {
+    const noun = kind === 'image' ? 'Image' : 'File';
+    if (isExternal(url)) {
       this.issues.warning(
         'asset-external',
         file,
@@ -250,16 +273,16 @@ class Loader {
     }
     let relative: string;
     try {
-      relative = decodeURIComponent(url.replace(/[?#].*$/, ''));
+      relative = decodeURIComponent(stripQuery(url));
     } catch {
-      this.issues.error('asset-path-invalid', file, `Image path "${url}" is not a valid URL path.`, line);
+      this.issues.error('asset-path-invalid', file, `${noun} path "${url}" is not a valid URL path.`, line);
       return undefined;
     }
     if (relative === '' || relative.startsWith('/')) {
       this.issues.error(
         'asset-path-invalid',
         file,
-        `Image path "${url}" must be relative to the Markdown file (e.g. "images/screen.png").`,
+        `${noun} path "${url}" must be relative to the Markdown file (e.g. "${kind === 'image' ? 'images/screen.png' : 'data/table.csv'}").`,
         line,
       );
       return undefined;
@@ -267,10 +290,10 @@ class Loader {
 
     const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), relative));
     if (resolved.startsWith('../') || resolved === '..') {
-      this.issues.error('asset-outside-repo', file, `Image "${url}" points outside the content repository.`, line);
+      this.issues.error('asset-outside-repo', file, `${noun} "${url}" points outside the content repository.`, line);
       return undefined;
     }
-    if (!IMAGE_EXTENSIONS.has(path.posix.extname(resolved).toLowerCase())) {
+    if (kind === 'image' && !IMAGE_EXTENSIONS.has(path.posix.extname(resolved).toLowerCase())) {
       this.issues.error(
         'asset-type-unsupported',
         file,
@@ -282,18 +305,18 @@ class Loader {
 
     const exists = await this.fileExistsExactCase(resolved);
     if (exists && !(await this.isInsideRoot(resolved))) {
-      this.issues.error('asset-outside-repo', file, `Image "${url}" is a link to a file outside the repository.`, line);
+      this.issues.error('asset-outside-repo', file, `${noun} "${url}" is a link to a file outside the repository.`, line);
       return undefined;
     }
     if (!exists) {
       this.issues.warning(
         'asset-missing',
         file,
-        `Image "${url}" was not found at "${resolved}" (paths are case-sensitive). The part will show a placeholder.`,
+        `${noun} "${url}" was not found at "${resolved}" (paths are case-sensitive). The part will show a placeholder.`,
         line,
       );
     }
-    return { url, path: resolved, exists, ...(line !== undefined ? { line } : {}) };
+    return { kind, url, path: resolved, exists, ...(line !== undefined ? { line } : {}) };
   }
 
   private checkDirectivesAndHtml(tree: Root, file: string): void {

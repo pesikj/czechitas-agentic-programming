@@ -43,7 +43,7 @@ parts:
   - 02-instalace.md
 ```
 
-- `public` (optional, default `false`): when `true`, anyone can read the lecture and its images without an account, and the title page and sign-in page link to it. Use it for material learners need before the course, such as tool installation. Everything else stays sign-in only.
+- `public` (optional, default `false`): when `true`, anyone can read the lecture, its images and its linked files without an account, and the title page and sign-in page link to it. Use it for material learners need before the course, such as tool installation. Everything else stays sign-in only.
 - `parts` order is the part order (**Část 1 z N**). The paths are relative to the lecture directory and must be `.md` files inside it.
 - A `.md` file in the lecture directory that is not listed is reported as a warning.
 
@@ -137,6 +137,14 @@ The same dialect is used for course pages, learner response previews and adminis
 - Images are served only to signed-in users. External image URLs are reported as a warning and are **not displayed**: the site's Content Security Policy loads images only from itself, so they cannot bypass sign-in or reveal learners to other servers.
 - Missing alternative text → warning. A missing file → warning; the part still loads and shows a placeholder.
 
+## Linked files
+
+- Link to data, code or other material with an ordinary Markdown link: `[prodeje](data/prodeje.csv)`, `[skript](skripty/analyza.py)`. Reference-style links work too.
+- Paths follow the image rules: **relative to the Markdown file**, inside the repository, **case-sensitive**.
+- Downloadable types: `.csv .tsv .json .xml .yaml .yml .txt .md .xlsx .xls .parquet .py .ipynb .js .ts .sql .sh .ps1 .zip .pdf`. Links to other paths (websites, site pages like `/hledat`, `#anchors`, other extensions) are left as written.
+- Files are served only to signed-in users (or with a public lecture) and always as a **download**; the browser never opens or runs them. Only files linked from the content are served, never the rest of the repository.
+- A missing file → warning; the part still loads and shows a placeholder instead of the link. A path outside the repository → error.
+
 ## Validation
 
 `loadContent()` returns a model only when there are **no errors**. Publishing (milestone 4) refuses a revision with errors and keeps the previous one. Warnings are shown to the administrator but do not block publishing. Each issue has a severity, a code, a file and, where possible, a line.
@@ -153,7 +161,7 @@ The same dialect is used for course pages, learner response previews and adminis
 | `exercise-invalid` | error | Malformed exercise YAML or schema |
 | `exercise-id-duplicate` / `field-id-duplicate` | error | Duplicate exercise or field id |
 | `alternatives-invalid` | error | Malformed alternatives block |
-| `asset-path-invalid` / `asset-outside-repo` / `asset-type-unsupported` | error | Unusable image path |
+| `asset-path-invalid` / `asset-outside-repo` / `asset-type-unsupported` | error | Unusable image or linked-file path |
 | `lecture-unlisted` / `part-unlisted` | warning | A file or directory exists but is not listed |
-| `asset-missing` / `asset-external` / `image-alt-missing` | warning | Image problems that do not block the part |
+| `asset-missing` / `asset-external` / `image-alt-missing` | warning | Image or linked-file problems that do not block the part |
 | `raw-html-ignored` / `directive-unknown` | warning | Unsupported syntax, shown as text or dropped |

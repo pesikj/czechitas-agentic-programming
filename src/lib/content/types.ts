@@ -91,6 +91,8 @@ export interface Exercise {
 }
 
 export interface AssetRef {
+  /** `image`: shown in the page; `file`: target of an ordinary link, downloaded. */
+  kind: 'image' | 'file';
   /** URL exactly as written in the Markdown. */
   url: string;
   /** Resolved path relative to the repository root. */

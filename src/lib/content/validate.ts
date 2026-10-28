@@ -7,6 +7,12 @@ const ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']);
 
+/** Files learners can download through ordinary links (data, code, archives). */
+export const FILE_EXTENSIONS = new Set([
+  '.csv', '.tsv', '.json', '.xml', '.yaml', '.yml', '.txt', '.md', '.xlsx', '.xls', '.parquet',
+  '.py', '.ipynb', '.js', '.ts', '.sql', '.sh', '.ps1', '.zip', '.pdf',
+]);
+
 const nonEmpty = z.string().trim().min(1);
 
 export type TocEntryInput = { lecture: string } | { title: string; items: TocEntryInput[] };
