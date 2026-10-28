@@ -207,8 +207,8 @@ describe('renderMarkdown — page features', () => {
                 : undefined,
       },
     );
-    expect(html).toContain('<a href="/obsah/data/a.csv">Data</a>');
-    expect(html).toContain('<a href="/obsah/py/s.py">skript</a>');
+    expect(html).toContain('<a href="/obsah/data/a.csv" download>Data</a>');
+    expect(html).toContain('<a href="/obsah/py/s.py" download>skript</a>');
     expect(html).toContain('<span class="file-missing">[Soubor není k dispozici: chybí]</span>');
     expect(html).toContain('<a href="https://example.com/c.csv">web</a>');
   });

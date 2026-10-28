@@ -43,8 +43,8 @@ describe('content provider', () => {
   it('renders links to files with protected asset URLs', async () => {
     const { model } = await provider.getContent();
     const html = await provider.getRenderedPart(model!.lectures[0]!.parts[1]!);
-    expect(html).toContain('<a href="/obsah/lectures/01-zaklady/soubory/prodeje.csv">data o prodejích</a>');
-    expect(html).toContain('<a href="/obsah/lectures/01-zaklady/skripty/analyza.py">skript</a>');
+    expect(html).toContain('<a href="/obsah/lectures/01-zaklady/soubory/prodeje.csv" download>data o prodejích</a>');
+    expect(html).toContain('<a href="/obsah/lectures/01-zaklady/skripty/analyza.py" download>skript</a>');
   });
 
   it('renders parts with protected asset URLs and image sizes', async () => {

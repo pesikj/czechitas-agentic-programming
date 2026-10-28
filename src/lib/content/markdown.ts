@@ -84,6 +84,7 @@ const sanitizeSchema: SanitizeSchema = {
     span: [...withoutClassName(defaultSchema.attributes?.span), ['className', 'code-label', 'image-missing', 'file-missing']],
     p: [...withoutClassName(defaultSchema.attributes?.p), ['className', 'alternative-label']],
     img: [...(defaultSchema.attributes?.img ?? []), 'loading', 'decoding', 'width', 'height'],
+    a: [...(defaultSchema.attributes?.a ?? []), 'download'],
   },
 };
 
@@ -163,7 +164,8 @@ function transformTree(tree: Root, source: string, options: RenderOptions): void
         return [SKIP, index + 1];
       }
       // Rewritten in place, so children (e.g. an image) are visited with a `link` parent.
-      Object.assign(node, { type: 'link', url: resolution.href });
+      // `download` keeps the unsaved-answer guard from treating the click as leaving the page.
+      Object.assign(node, { type: 'link', url: resolution.href, data: { hProperties: { download: true } } });
       return;
     }
 
