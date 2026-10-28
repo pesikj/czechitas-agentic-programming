@@ -30,6 +30,7 @@ export function parseMarkdown(source: string, mode: MarkdownMode): Root {
 }
 
 export type ImageResolution = { src: string; width?: number; height?: number } | { missing: true };
+export type LinkResolution = { href: string } | { missing: true };
 
 export interface RenderOptions {
   mode: MarkdownMode;
@@ -38,6 +39,8 @@ export interface RenderOptions {
    * unchanged (e.g. external images); `{ missing: true }` renders a readable fallback.
    */
   resolveImage?: (url: string) => ImageResolution | undefined;
+  /** Maps an authored link URL to its target, like `resolveImage` (e.g. downloadable files). */
+  resolveLink?: (url: string) => LinkResolution | undefined;
   /** Demotes headings (e.g. 1: `#` becomes h2) so the page keeps a single h1. */
   shiftHeadings?: number;
   /** Removes a leading heading with this text, when the page already shows it as the title. */
@@ -78,7 +81,7 @@ const sanitizeSchema: SanitizeSchema = {
       ['className', 'footnotes', 'alternative'],
       'dataLabel',
     ],
-    span: [...withoutClassName(defaultSchema.attributes?.span), ['className', 'code-label', 'image-missing']],
+    span: [...withoutClassName(defaultSchema.attributes?.span), ['className', 'code-label', 'image-missing', 'file-missing']],
     p: [...withoutClassName(defaultSchema.attributes?.p), ['className', 'alternative-label']],
     img: [...(defaultSchema.attributes?.img ?? []), 'loading', 'decoding', 'width', 'height'],
   },
@@ -145,6 +148,23 @@ function transformTree(tree: Root, source: string, options: RenderOptions): void
       const replacement = resolution && parent.type !== 'link' ? { type: 'link', url: src, children: [image] } : image;
       parent.children.splice(index, 1, replacement as never);
       return [SKIP, index + 1];
+    }
+
+    if (node.type === 'link' || node.type === 'linkReference') {
+      const url = node.type === 'link' ? node.url : definitions.get(node.identifier);
+      const resolution = url === undefined ? undefined : options.resolveLink?.(url);
+      if (!resolution) return;
+      if ('missing' in resolution) {
+        parent.children.splice(index, 1, {
+          type: 'emphasis',
+          children: [{ type: 'text', value: `[Soubor není k dispozici: ${toText(node) || url}]` }],
+          data: { hName: 'span', hProperties: { className: ['file-missing'] } },
+        } as never);
+        return [SKIP, index + 1];
+      }
+      // Rewritten in place, so children (e.g. an image) are visited with a `link` parent.
+      Object.assign(node, { type: 'link', url: resolution.href });
+      return;
     }
 
     if (node.type === 'code' && !(options.mode === 'content' && node.lang === EXERCISE_LANG)) {

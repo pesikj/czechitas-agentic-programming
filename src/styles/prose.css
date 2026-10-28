@@ -109,7 +109,8 @@
   cursor: zoom-in;
 }
 
-.prose .image-missing {
+.prose .image-missing,
+.prose .file-missing {
   display: inline-block;
   padding: 0.5em 1em;
   border: 2px dashed var(--warning);

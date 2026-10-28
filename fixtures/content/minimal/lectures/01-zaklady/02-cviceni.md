@@ -3,7 +3,9 @@ id: prvni-cviceni
 title: První cvičení
 ---
 
-Spusťte agenta v terminálu.
+Spusťte agenta v terminálu. Stáhněte si [data o prodejích](soubory/prodeje.csv) a [skript][skript].
+
+[skript]: skripty/analyza.py
 
 ```exercise
 id: prvni-prompt

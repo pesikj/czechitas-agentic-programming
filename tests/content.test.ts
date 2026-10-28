@@ -1,4 +1,5 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadContent, renderMarkdown } from '../src/lib/content/index';
@@ -46,8 +47,42 @@ describe('loadContent — minimal fixture', async () => {
 
   it('resolves image assets relative to the part', () => {
     expect(model!.lectures[0]!.parts[0]!.assets).toEqual([
-      { url: 'images/schema.png', path: 'lectures/01-zaklady/images/schema.png', exists: true, line: 10 },
+      { kind: 'image', url: 'images/schema.png', path: 'lectures/01-zaklady/images/schema.png', exists: true, line: 10 },
     ]);
+  });
+
+  it('resolves linked files in subdirectories, including reference-style links', () => {
+    expect(model!.lectures[0]!.parts[1]!.assets).toEqual([
+      { kind: 'file', url: 'soubory/prodeje.csv', path: 'lectures/01-zaklady/soubory/prodeje.csv', exists: true, line: 6 },
+      { kind: 'file', url: 'skripty/analyza.py', path: 'lectures/01-zaklady/skripty/analyza.py', exists: true, line: 6 },
+    ]);
+  });
+});
+
+describe('loadContent — linked files', () => {
+  async function issuesFor(markdown: string) {
+    const dir = await mkdtemp(path.join(tmpdir(), 'content-'));
+    await mkdir(path.join(dir, 'lectures/a'), { recursive: true });
+    await writeFile(path.join(dir, 'course.yaml'), 'title: T\ntoc:\n  - lecture: a\n');
+    await writeFile(path.join(dir, 'lectures/a/lecture.yaml'), 'id: a\ntitle: A\nparts: [p.md]\n');
+    await writeFile(path.join(dir, 'lectures/a/p.md'), `---\nid: p\ntitle: P\n---\n\n${markdown}\n`);
+    const result = await loadContent(dir);
+    await rm(dir, { recursive: true });
+    return result;
+  }
+
+  it('ignores web links, site routes, anchors and unsupported file types', async () => {
+    const { model, issues } = await issuesFor(
+      '[web](https://example.com/data.csv) [mail](mailto:a@b.cz) [hledat](/hledat) [kotva](#cast) [stránka](jinde.html)',
+    );
+    expect(issues).toEqual([]);
+    expect(model!.lectures[0]!.parts[0]!.assets).toEqual([]);
+  });
+
+  it('rejects linked files outside the repository', async () => {
+    const { model, issues } = await issuesFor('[data](../../../data.csv)');
+    expect(model).toBeUndefined();
+    expect(issues).toMatchObject([{ severity: 'error', code: 'asset-outside-repo', line: 6 }]);
   });
 });
 
@@ -82,6 +117,7 @@ describe('loadContent — invalid fixtures', () => {
     expect(model).toBeDefined();
     expect(issues).toMatchObject([
       { severity: 'warning', code: 'asset-missing', file: 'lectures/01-zaklady/01-uvod.md', line: 10 },
+      { severity: 'warning', code: 'asset-missing', file: 'lectures/01-zaklady/02-cviceni.md', line: 6 },
     ]);
   });
 });
@@ -154,6 +190,27 @@ describe('renderMarkdown — page features', () => {
     );
     expect(html).toContain('<span class="image-missing">[Obrázek není k dispozici: Chybí]</span>');
     expect(html).toContain('<img src="https://example.com/c.png" alt="Venku"');
+  });
+
+  it('points linked files at the asset route and renders a fallback for missing ones', async () => {
+    const html = await renderMarkdown(
+      '[Data](data/a.csv), [skript][s], [chybí](data/b.csv), [web](https://example.com/c.csv)\n\n[s]: py/s.py',
+      {
+        mode: 'content',
+        resolveLink: (url) =>
+          url === 'data/a.csv'
+            ? { href: '/obsah/data/a.csv' }
+            : url === 'py/s.py'
+              ? { href: '/obsah/py/s.py' }
+              : url === 'data/b.csv'
+                ? { missing: true }
+                : undefined,
+      },
+    );
+    expect(html).toContain('<a href="/obsah/data/a.csv">Data</a>');
+    expect(html).toContain('<a href="/obsah/py/s.py">skript</a>');
+    expect(html).toContain('<span class="file-missing">[Soubor není k dispozici: chybí]</span>');
+    expect(html).toContain('<a href="https://example.com/c.csv">web</a>');
   });
 
   it('keeps a single page heading', async () => {

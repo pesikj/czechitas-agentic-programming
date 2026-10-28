@@ -16,10 +16,11 @@ const file = (relative: string) => path.join(TEST_CONTENT_REPO, relative);
 const edit = (relative: string, change: (text: string) => string) =>
   writeFileSync(file(relative), change(readFileSync(file(relative), 'utf8')));
 const IMAGE = 'lectures/01-zaklady/images/schema.png';
+const ASSETS = [IMAGE, 'lectures/01-zaklady/skripty/analyza.py', 'lectures/01-zaklady/soubory/prodeje.csv'];
 
 const storedRevisions = async () => (await getDb().select({ id: contentSnapshots.revisionId }).from(contentSnapshots)).map((row) => row.id);
 const storedAssets = async (revisionId: string) =>
-  (await getDb().select({ path: contentAssets.path }).from(contentAssets).where(eq(contentAssets.revisionId, revisionId))).map((row) => row.path);
+  (await getDb().select({ path: contentAssets.path }).from(contentAssets).where(eq(contentAssets.revisionId, revisionId)).orderBy(contentAssets.path)).map((row) => row.path);
 const leftoverCheckouts = () => readdirSync(os.tmpdir()).filter((name) => name.startsWith(CHECKOUT_PREFIX));
 /** Forgets the in-memory snapshot, as a fresh server process would. */
 const forgetSnapshot = () => activateSnapshot({ result: { issues: [] }, assets: new Map(), rendered: new Map(), search: [] });
@@ -34,7 +35,7 @@ describe('content publishing', () => {
     if (first.status !== 'activated') return;
     expect(first.revision.commitSha).toMatch(/^[0-9a-f]{40}$/);
     expect(await storedRevisions()).toEqual([first.revision.id]);
-    expect(await storedAssets(first.revision.id)).toEqual([IMAGE]);
+    expect(await storedAssets(first.revision.id)).toEqual(ASSETS);
     expect(leftoverCheckouts()).toEqual(checkoutsBefore);
 
     const content = await getContent();
@@ -118,6 +119,6 @@ describe('content publishing', () => {
     expect(content.state).toBe('ready');
     expect(content.model?.title).toBe('Upravený kurz');
     expect(await storedRevisions()).toEqual([active.id]);
-    expect(await storedAssets(active.id)).toEqual([IMAGE]);
+    expect(await storedAssets(active.id)).toEqual(ASSETS);
   });
 });

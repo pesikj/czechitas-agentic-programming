@@ -4,7 +4,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { imageSize } from 'image-size';
-import { loadContent, renderMarkdown, type ImageResolution } from '../../lib/content/index';
+import { loadContent, renderMarkdown, type ImageResolution, type LinkResolution } from '../../lib/content/index';
 import type { LoadResult, Part } from '../../lib/content/types';
 import { buildSearchIndex, search as searchIndex, type SearchDocument, type SearchHit } from '../../lib/search';
 import { getConfig } from '../config';
@@ -15,7 +15,7 @@ import { loadSnapshot, readAsset, saveSnapshot } from './snapshot-store';
 
 const ASSET_ROUTE = '/obsah/';
 
-/** Servable image types by lowercase file extension. */
+/** Servable types by lowercase file extension: images, then downloadable files. */
 const CONTENT_TYPES: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -23,7 +23,32 @@ const CONTENT_TYPES: Record<string, string> = {
   '.gif': 'image/gif',
   '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
+  '.csv': 'text/csv; charset=utf-8',
+  '.tsv': 'text/tab-separated-values; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
+  '.yaml': 'application/yaml; charset=utf-8',
+  '.yml': 'application/yaml; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+  '.md': 'text/markdown; charset=utf-8',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.xls': 'application/vnd.ms-excel',
+  '.parquet': 'application/vnd.apache.parquet',
+  '.py': 'text/x-python; charset=utf-8',
+  '.ipynb': 'application/x-ipynb+json; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.ts': 'text/plain; charset=utf-8',
+  '.sql': 'application/sql; charset=utf-8',
+  '.sh': 'application/x-sh; charset=utf-8',
+  '.ps1': 'text/plain; charset=utf-8',
+  '.zip': 'application/zip',
+  '.pdf': 'application/pdf',
 };
+
+/** Content type served for a repository path, or undefined if the type is not servable. */
+export function contentTypeOf(repoPath: string): string | undefined {
+  return CONTENT_TYPES[path.extname(repoPath).toLowerCase()];
+}
 
 export interface SnapshotAsset {
   /** Path relative to the repository root. */
@@ -42,7 +67,7 @@ export interface Snapshot {
    */
   dir?: string;
   result: LoadResult;
-  /** Existing, servable images by repository-relative path. */
+  /** Existing, servable images and linked files by repository-relative path. */
   assets: Map<string, SnapshotAsset>;
   /** Sanitized HTML by `lectureId/partId`. */
   rendered: Map<string, string>;
@@ -72,9 +97,10 @@ export async function buildSnapshot(dir: string, revision?: Snapshot['revision']
     for (const lecture of model.lectures) {
       for (const part of lecture.parts) {
         for (const asset of part.assets) {
-          const contentType = CONTENT_TYPES[path.extname(asset.path).toLowerCase()];
+          const contentType = contentTypeOf(asset.path);
           if (!asset.exists || !contentType || assets.has(asset.path)) continue;
-          assets.set(asset.path, { path: asset.path, contentType, ...(await dimensionsOf(path.join(dir, asset.path))) });
+          const dimensions = contentType.startsWith('image/') ? await dimensionsOf(path.join(dir, asset.path)) : {};
+          assets.set(asset.path, { path: asset.path, contentType, ...dimensions });
         }
       }
     }
@@ -93,7 +119,8 @@ export function activateSnapshot(snapshot: Snapshot): void {
 const key = (part: Pick<Part, 'lectureId' | 'id'>) => `${part.lectureId}/${part.id}`;
 
 function render(part: Part, assets: Snapshot['assets']): Promise<string> {
-  const byUrl = new Map(part.assets.map((asset) => [asset.url, asset]));
+  const byUrl = new Map(part.assets.filter((asset) => asset.kind === 'image').map((asset) => [asset.url, asset]));
+  const filesByUrl = new Map(part.assets.filter((asset) => asset.kind === 'file').map((asset) => [asset.url, asset]));
   return renderMarkdown(part.source, {
     mode: 'content',
     shiftHeadings: 1,
@@ -108,6 +135,12 @@ function render(part: Part, assets: Snapshot['assets']): Promise<string> {
         ...(served.width ? { width: served.width } : {}),
         ...(served.height ? { height: served.height } : {}),
       };
+    },
+    resolveLink(url): LinkResolution | undefined {
+      const asset = filesByUrl.get(url);
+      if (!asset) return undefined;
+      const served = assets.get(asset.path);
+      return served ? { href: assetUrl(served.path) } : { missing: true };
     },
   });
 }
@@ -201,15 +234,15 @@ export async function searchContent(query: string): Promise<SearchHit[]> {
 }
 
 /**
- * A servable image of the current content, or undefined. Only images referenced by the current
- * content are served, so other repository files are never exposed.
+ * A servable image or linked file of the current content, or undefined. Only files referenced by
+ * the current content are served, so other repository files are never exposed.
  */
-export async function resolveAsset(repoPath: string): Promise<{ body: Buffer; contentType: string } | undefined> {
+export async function resolveAsset(repoPath: string): Promise<{ path: string; body: Buffer; contentType: string } | undefined> {
   const snapshot = await currentSnapshot();
   const asset = snapshot?.result.model ? snapshot.assets.get(repoPath) : undefined;
   if (!snapshot || !asset) return undefined;
   const body = snapshot.revision
     ? await readAsset(snapshot.revision.id, asset.path)
     : await readFile(path.join(snapshot.dir!, asset.path)).catch(() => undefined);
-  return body ? { body, contentType: asset.contentType } : undefined;
+  return body ? { path: asset.path, body, contentType: asset.contentType } : undefined;
 }
