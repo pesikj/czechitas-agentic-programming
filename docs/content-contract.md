@@ -127,6 +127,7 @@ The same dialect is used for course pages, learner response previews and adminis
   | `prompt` | **Prompt pro agenta** | yes |
   | `output` | **Výstup** (expected output) | no |
   | `text`, `txt`, `plaintext` or none | neutral block, no label | yes |
+  | `mermaid` | **Diagram**: drawn from the [Mermaid](https://mermaid.js.org) source in the learner's colour theme; the source stays available under it. Without JavaScript, or if the source is invalid, it is shown as code | no |
   | any other language, e.g. `python` | **Kód (python)** | yes |
 
 ## Images

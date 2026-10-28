@@ -220,6 +220,35 @@
   padding-right: 14ch;
 }
 
+/* Drawn diagrams (src/scripts/diagrams.ts): the drawing, then the collapsed source. */
+.prose .code-block[data-rendered] {
+  background: var(--background0);
+}
+
+.prose .code-block[data-kind='diagram'] > img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  /* Drawn in the theme's colours, so no white image backdrop or frame. */
+  border: 0;
+  background: transparent;
+  margin: 1em auto;
+  padding: 0 1ch;
+  box-sizing: border-box;
+}
+
+.prose .code-block[data-kind='diagram'] summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 1ch;
+  border-top: 1px solid var(--background2);
+  font-family: var(--font-family);
+  font-size: 0.85rem;
+  color: var(--foreground2);
+  cursor: pointer;
+}
+
 /* ---------- Alternatives ---------- */
 
 .prose .alternatives {

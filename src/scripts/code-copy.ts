@@ -1,7 +1,7 @@
-// Copy buttons on code blocks. Copies only the code, never the label; output blocks have none.
+// Copy buttons on code blocks. Copies only the code, never the label; output blocks and diagrams have none.
 import { announce } from './announce';
 
-for (const block of document.querySelectorAll<HTMLElement>('.prose .code-block:not([data-kind="output"])')) {
+for (const block of document.querySelectorAll<HTMLElement>('.prose .code-block:not([data-kind="output"], [data-kind="diagram"])')) {
   const code = block.querySelector('code');
   if (!code) continue;
   const button = document.createElement('button');

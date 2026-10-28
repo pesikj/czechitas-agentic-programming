@@ -179,6 +179,13 @@ describe('renderMarkdown — page features', () => {
     expect(html).toContain('<span class="code-label">Kód (python)</span>');
   });
 
+  it('marks mermaid blocks as diagrams and keeps their source as the fallback', async () => {
+    const html = await renderMarkdown('```mermaid\nflowchart LR\n  a --> b\n```', { mode: 'content' });
+    expect(html).toBe(
+      '<div class="code-block" data-kind="diagram"><span class="code-label">Diagram</span><pre tabindex="0"><code class="language-mermaid">flowchart LR\n  a --> b\n</code></pre></div>',
+    );
+  });
+
   it('resolves images into lazy links and renders a fallback for missing ones', async () => {
     const html = await renderMarkdown('![Schéma](a.png)\n\n![Chybí](b.png)\n\n![Venku](https://example.com/c.png)', {
       mode: 'content',

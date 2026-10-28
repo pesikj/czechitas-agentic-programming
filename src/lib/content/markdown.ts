@@ -47,7 +47,7 @@ export interface RenderOptions {
   omitLeadingHeading?: string;
 }
 
-export type CodeKind = 'terminal' | 'prompt' | 'output' | 'text' | 'code';
+export type CodeKind = 'terminal' | 'prompt' | 'output' | 'text' | 'diagram' | 'code';
 
 const TERMINAL_LANGS = new Set(['bash', 'sh', 'shell', 'zsh', 'console', 'powershell', 'ps1', 'pwsh', 'cmd', 'bat']);
 const TEXT_LANGS = new Set(['', 'text', 'txt', 'plaintext']);
@@ -58,6 +58,8 @@ function codeKind(lang: string | null | undefined): { kind: CodeKind; label?: st
   if (TERMINAL_LANGS.has(language)) return { kind: 'terminal', label: 'Terminál' };
   if (language === 'prompt') return { kind: 'prompt', label: 'Prompt pro agenta' };
   if (language === 'output') return { kind: 'output', label: 'Výstup' };
+  // Drawn in the browser (src/scripts/diagrams.ts); the source is the fallback.
+  if (language === 'mermaid') return { kind: 'diagram', label: 'Diagram' };
   if (TEXT_LANGS.has(language)) return { kind: 'text' };
   return { kind: 'code', label: `Kód (${language})` };
 }
