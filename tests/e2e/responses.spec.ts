@@ -39,6 +39,17 @@ test.describe('exercise responses', () => {
     await expect(panel(again).getByRole('status')).toContainText('Uloženo');
   });
 
+  test('a Mermaid diagram in an answer is drawn in the preview', async ({ browser }) => {
+    const learner = await createActiveUser('diagram-preview');
+    const context = await signedInContext(browser, learner);
+    const page = await context.newPage();
+    await page.goto(EXERCISE);
+    await field(page, 'Použitý prompt').fill('```mermaid\nflowchart LR\n    accTitle: Můj postup\n    a["Zadání"] --> b["Ověření"]\n```');
+    await panel(page).getByRole('button', { name: 'Náhled' }).click();
+    await expect(panel(page).getByRole('img', { name: 'Diagram: Můj postup' })).toBeVisible();
+    await context.close();
+  });
+
   test('a failed save keeps the text and can be retried', async ({ browser }) => {
     const page = await (await signedInContext(browser, await createActiveUser('failed-save'))).newPage();
     await page.goto(EXERCISE);
