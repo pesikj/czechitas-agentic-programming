@@ -47,9 +47,11 @@ test('mermaid diagrams are drawn, follow the theme and keep their source', async
   await expect(image).toBeVisible();
   expect(await image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
   const light = (await image.getAttribute('src'))!;
+  // Label lines, joined: where a label wraps depends on the fonts installed (e.g. in CI).
   const text = await image.evaluate((img: HTMLImageElement) => {
     const svg = decodeURIComponent(img.src.slice(img.src.indexOf(',') + 1));
-    return new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement.textContent;
+    const lines = new DOMParser().parseFromString(svg, 'image/svg+xml').querySelectorAll('text tspan:not(:has(tspan))');
+    return [...lines].map((line) => line.textContent).join(' ').replace(/\s+/g, ' ');
   });
   expect(text).toContain('Upřesnit prompt');
 
