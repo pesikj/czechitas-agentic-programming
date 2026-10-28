@@ -59,6 +59,30 @@ describe('loadContent — minimal fixture', async () => {
   });
 });
 
+describe('loadContent — lecture titles', () => {
+  async function lectureTitle(title: string) {
+    const dir = await mkdtemp(path.join(tmpdir(), 'content-'));
+    await mkdir(path.join(dir, 'lectures/a'), { recursive: true });
+    await writeFile(path.join(dir, 'course.yaml'), 'title: T\ntoc:\n  - lecture: a\n');
+    await writeFile(path.join(dir, 'lectures/a/lecture.yaml'), `id: a\ntitle: "${title}"\nparts: [p.md]\n`);
+    await writeFile(path.join(dir, 'lectures/a/p.md'), '---\nid: p\ntitle: P\n---\n\nText\n');
+    const { model } = await loadContent(dir);
+    await rm(dir, { recursive: true });
+    return model!.lectures[0]!.title;
+  }
+
+  it('drops leading zeros from the authored lecture number', async () => {
+    expect(await lectureTitle('01 – Instalace nástrojů')).toBe('1 – Instalace nástrojů');
+    expect(await lectureTitle('007 – Agent')).toBe('7 – Agent');
+  });
+
+  it('keeps other titles unchanged', async () => {
+    for (const title of ['10 – Git', '0 – Úvod', 'Python v době AI', '2026: rok agentů']) {
+      expect(await lectureTitle(title)).toBe(title);
+    }
+  });
+});
+
 describe('loadContent — linked files', () => {
   async function issuesFor(markdown: string) {
     const dir = await mkdtemp(path.join(tmpdir(), 'content-'));

@@ -148,9 +148,9 @@ test('typing "/" inside a text field does not jump to the command bar', async ({
 });
 
 test.describe('/open', () => {
-  test('home shows lecture numbers and /open N opens a lecture', async ({ page }) => {
+  test('home and menu show no extra lecture numbers, and /open N opens a lecture', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('.lecture-list .number').first()).toHaveText('1');
+    await expect(page.locator('.lecture-list .number, .tree .number')).toHaveCount(0);
     await runCommand(page, '/open 2');
     await expect(page).toHaveURL('/lekce/prace-s-promptem/iterace');
   });

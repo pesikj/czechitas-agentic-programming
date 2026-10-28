@@ -1,6 +1,6 @@
 ---
 import type { ContentModel, TocNode } from '../lib/content/types';
-import { lectureNumber, partFileName, partHref } from '../lib/navigation';
+import { partFileName, partHref } from '../lib/navigation';
 
 interface Props {
   nodes: TocNode[];
@@ -31,9 +31,6 @@ const lectures = new Map(model.lectures.map((lecture) => [lecture.id, lecture]))
         <li>
           <details open={isCurrent || undefined}>
             <summary>
-              <span class="number">
-                {lectureNumber(model, lecture)}
-              </span>
               {lecture.title}
             </summary>
             <ol class="parts" role="list">
