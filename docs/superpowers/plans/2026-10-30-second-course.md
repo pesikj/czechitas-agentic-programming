@@ -27,7 +27,7 @@
 2. **A snapshot stored before this change** (`model` without `courses`) is still in the database after deploy. The first request must rebuild and *replace* it from its commit. Inserting it again would hit the primary key, be ignored as "another process stored it first", and leave the site rebuilding on every cold start. Pinned in Task 2.
 3. **A lecture requested under the wrong course prefix** (`/lekce/<data-lecture>`, `/data/lekce/<main-lecture>`, `/agent/` for the main course id, `/neexistuje/`) must return 404. It must never render the lecture or redirect a visitor to sign-in for content that doesn't exist. Pinned in Task 3.
 4. **`/course` with an unknown or ambiguous argument, or with only one course**, must answer with a message and suggestions, never throw. The same goes for Tab completion after `/course `. Pinned in Task 1.
-5. **Answers saved before this change** (`course_id` NULL) must appear under the main course in "Moje odpovědi" and in the admin course filter. Pinned in Task 4.
+5. **A Data exercise answered by a learner who also answered main-course exercises** must show each answer once, under its own course, in "Moje odpovědi" and in the exports. Pinned in Task 4.
 
 ---
 
@@ -229,20 +229,20 @@ After this task the site works exactly as before for the main course, and the ca
 **Files:**
 - Modify: `src/server/db/schema.ts`, `src/server/responses.ts`, `src/lib/export.ts`, `src/pages/moje-odpovedi/index.astro`, `src/pages/moje-odpovedi/export.md.ts`, `src/pages/admin/odpovedi/index.astro`, `src/pages/admin/odpovedi/export.md.ts`
 - Create: migration `drizzle/0001_*.sql` via `npm run db:generate`
-- Docs: `docs/data-model.md` (`responses.course_id`)
+- Docs: `docs/data-model.md` (`responses.course_id`, required)
 - Test: `tests/integration/responses.test.ts`, `tests/export.test.ts`, `tests/e2e/responses.spec.ts`
 
 **Interfaces:**
 - Consumes: `Catalog`, `Exercise.courseId`, `saveResponse({ catalog, … })` (Task 2).
-- `responses.courseId: text('course_id')` is nullable. NULL means the main course (rows saved before multiple courses). There is no backfill.
+- `responses.courseId: text('course_id').notNull()`. The existing rows are test data only (product owner, 30 October 2026). The migration fills them with `'agent'` so it applies on a non-empty table, then drops the default. No code treats legacy rows specially.
 - `saveResponse` stores `courseId: exercise.courseId`.
-- `listResponses(filter: { userId?: string; exerciseId?: string; course?: { id: string; isMain: boolean } })`: a main course matches `course_id = id OR course_id IS NULL`.
-- `groupByCourse<T extends { courseId: string | null }>(records: T[], catalog: Catalog | undefined): { courseId: string; title: string; records: T[] }[]` in `src/server/responses.ts`. Groups follow catalog order, NULL counts as `courses[0]`, and unknown ids come last with the id as title. Empty groups are omitted.
+- `listResponses(filter: { userId?: string; exerciseId?: string; courseId?: string })`.
+- `groupByCourse<T extends { courseId: string }>(records: T[], catalog: Catalog | undefined): { courseId: string; title: string; records: T[] }[]` in `src/server/responses.ts`. Groups follow catalog order, and unknown ids come last with the id as title. Empty groups are omitted.
 - `ExportRecord` gains `courseTitle?: string | null`. When the records carry more than one distinct `courseTitle`, `responsesToMarkdown` emits `## <courseTitle>` per group and demotes record headings to `###` and field headings to `####`. Otherwise the output is unchanged.
 - Admin filter query parameter: `kurz=<course id>`, also passed to the export link.
 
 - [ ] **Step 1: Write failing tests.**
-  - `tests/integration/responses.test.ts`: saving a data exercise stores `courseId === 'data'`. `listResponses({ course: { id: 'data', isMain: false } })` returns only data answers. **Review Focus 5:** a row inserted with `courseId: null` is returned by `listResponses({ course: { id: 'agent', isMain: true } })` and lands in the `agent` group of `groupByCourse`.
+  - `tests/integration/responses.test.ts`: saving a data exercise stores `courseId === 'data'`, and a main exercise stores `'agent'`. `listResponses({ courseId: 'data' })` returns only data answers. **Review Focus 5:** for one learner with answers in both courses, `groupByCourse` returns the `agent` group, then the `data` group, each containing only its own answers.
   - `tests/export.test.ts`: two records with `courseTitle` `'A'` and `'B'` produce `## A` and `## B` and `### ` record headings. Records with one course title produce exactly today's output (existing snapshot assertions unchanged).
   - `tests/e2e/responses.spec.ts`: after saving one answer in each course, "Moje odpovědi" shows two `h2` group headings in catalog order. In admin "Odpovědi", choosing course `Digitální akademie: Data` shows only the data answer.
 
