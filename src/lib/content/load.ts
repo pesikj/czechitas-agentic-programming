@@ -1,14 +1,27 @@
-// Loads and validates a content repository checkout into a ContentModel.
+// Loads and validates a content repository checkout into a Catalog of courses.
 // See docs/content-contract.md for the format.
 import { readFile, readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Definition, Nodes, Root } from 'mdast';
 import { visit } from 'unist-util-visit';
+import type { z } from 'zod';
 import { ALTERNATIVES_DIRECTIVE, EXERCISE_LANG, OPTION_DIRECTIVE, parseMarkdown } from './markdown';
-import type { AssetRef, ContentModel, Exercise, Lecture, LoadResult, Part, TocNode } from './types';
 import {
+  DEFAULT_MAIN_COURSE_ID,
+  type AssetRef,
+  type ContentModel,
+  type Exercise,
+  type Lecture,
+  type LoadResult,
+  type Part,
+  type TocNode,
+} from './types';
+import {
+  FILE_EXTENSIONS,
   IMAGE_EXTENSIONS,
   IssueCollector,
+  RESERVED_COURSE_IDS,
+  additionalCourseSchema,
   checkId,
   checkSchema,
   courseSchema,
@@ -23,44 +36,131 @@ const COURSE_FILE = 'course.yaml';
 const LECTURES_DIR = 'lectures';
 const LECTURE_FILE = 'lecture.yaml';
 
-/** Loads the repository at `rootDir`. The model is returned only if there are no errors. */
+/**
+ * Loads the repository at `rootDir`: the main course at the root and the additional courses
+ * declared in its `courses`. The catalog is returned only if there are no errors.
+ */
 export async function loadContent(rootDir: string): Promise<LoadResult> {
-  const loader = new Loader(await realpath(rootDir));
-  const model = await loader.load();
-  const issues = loader.issues.issues;
-  return loader.issues.hasErrors || !model ? { issues } : { model, issues };
+  const shared: Shared = { issues: new IssueCollector(), lectureIds: new Set(), exercises: new Map() };
+  const root = await realpath(rootDir);
+  const courses = await loadCourses(root, shared);
+  const issues = shared.issues.issues;
+  return shared.issues.hasErrors || !courses ? { issues } : { model: { courses, exercises: shared.exercises }, issues };
 }
 
+async function loadCourses(root: string, shared: Shared): Promise<ContentModel[] | undefined> {
+  const main = new Loader(root, '', shared);
+  const parsed = await main.readCourse(courseSchema);
+  if (!parsed) return undefined;
+  const { data, lineOf } = parsed;
+  const mainId = data.id ?? DEFAULT_MAIN_COURSE_ID;
+  if (data.id !== undefined) checkId(data.id, 'Course', COURSE_FILE, shared.issues, lineOf(['id']));
+  const courses = [await main.loadCourse(mainId, data, lineOf)];
+
+  const declared = new Set<string>();
+  for (const [index, id] of (data.courses ?? []).entries()) {
+    const line = lineOf(['courses', index]);
+    if (!checkId(id, 'Course', COURSE_FILE, shared.issues, line)) continue;
+    if (RESERVED_COURSE_IDS.includes(id) || id === mainId) {
+      shared.issues.error(
+        'course-id-reserved',
+        COURSE_FILE,
+        `Course id "${id}" is reserved (a site address or the main course id); choose another name.`,
+        line,
+      );
+      continue;
+    }
+    if (declared.has(id)) {
+      shared.issues.error('course-id-duplicate', COURSE_FILE, `Course "${id}" is listed more than once.`, line);
+      continue;
+    }
+    declared.add(id);
+    const loader = new Loader(root, id, shared);
+    const additional = await loader.readCourse(additionalCourseSchema);
+    if (additional) courses.push(await loader.loadCourse(id, additional.data, additional.lineOf));
+  }
+  return courses;
+}
+
+/** State shared by the courses, so ids are unique across the whole repository. */
+interface Shared {
+  issues: IssueCollector;
+  lectureIds: Set<string>;
+  /** Every exercise of every course. */
+  exercises: Map<string, Exercise>;
+}
+
+type LineOf = (path: readonly PropertyKey[]) => number | undefined;
+
+const isExternal = (url: string) => /^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith('//');
+const stripQuery = (url: string) => url.replace(/[?#].*$/, '');
+
+/**
+ * A link to a downloadable repository file: relative, with a supported extension. Other links
+ * (websites, site routes like `/hledat`, anchors, other pages) are left as written.
+ */
+function isFileLink(url: string): boolean {
+  if (isExternal(url) || url.startsWith('/') || url.startsWith('#')) return false;
+  return FILE_EXTENSIONS.has(path.posix.extname(stripQuery(url)).toLowerCase());
+}
+
+/** Authored lecture numbers are shown without leading zeros: `01 – Úvod` becomes `1 – Úvod`. */
+function lectureTitle(title: string): string {
+  return title.replace(/^0+(?=\d)/, '');
+}
+
+/** Loads one course from its directory (`''` for the repository root). */
 class Loader {
-  readonly issues = new IssueCollector();
+  private readonly issues: IssueCollector;
   private readonly lectures: Lecture[] = [];
-  private readonly lectureIds = new Set<string>();
   private readonly listedLectureDirs = new Set<string>();
+  /** This course's exercises. */
   private readonly exercises = new Map<string, Exercise>();
+  private readonly courseFile: string;
+  private readonly lecturesDir: string;
+  private courseId = '';
+  private basePath = '';
 
-  constructor(private readonly root: string) {}
+  constructor(
+    private readonly root: string,
+    private readonly courseDir: string,
+    private readonly shared: Shared,
+  ) {
+    this.issues = shared.issues;
+    this.courseFile = this.inCourse(COURSE_FILE);
+    this.lecturesDir = this.inCourse(LECTURES_DIR);
+  }
 
-  async load(): Promise<ContentModel | undefined> {
-    const source = await this.readText(COURSE_FILE);
+  /** A path inside the course directory, relative to the repository root. */
+  private inCourse(relative: string): string {
+    return this.courseDir ? `${this.courseDir}/${relative}` : relative;
+  }
+
+  async readCourse<T>(schema: z.ZodType<T>): Promise<{ data: T; lineOf: LineOf } | undefined> {
+    const source = await this.readText(this.courseFile);
     if (source === undefined) {
-      this.issues.error('course-missing', COURSE_FILE, `The repository root must contain ${COURSE_FILE}.`);
+      const where = this.courseDir ? `The course directory ${this.courseDir}/` : 'The repository root';
+      this.issues.error('course-missing', this.courseFile, `${where} must contain ${COURSE_FILE}.`);
       return undefined;
     }
-    const parsed = parseYamlWithLines(source, COURSE_FILE, this.issues, 'yaml-invalid');
+    const parsed = parseYamlWithLines(source, this.courseFile, this.issues, 'yaml-invalid');
     if (!parsed) return undefined;
-    const course = checkSchema(courseSchema, parsed, COURSE_FILE, this.issues, 'schema-invalid');
-    if (!course) return undefined;
+    const data = checkSchema(schema, parsed, this.courseFile, this.issues, 'schema-invalid');
+    return data ? { data, lineOf: parsed.lineOf } : undefined;
+  }
 
-    const toc = await this.loadToc(course.toc, ['toc'], parsed.lineOf);
+  async loadCourse(id: string, course: { title: string; toc: TocEntryInput[] }, lineOf: LineOf): Promise<ContentModel> {
+    this.courseId = id;
+    this.basePath = this.courseDir ? `/${id}` : '';
+    const toc = await this.loadToc(course.toc, ['toc'], lineOf);
     await this.reportUnlistedLectures();
-
-    return { title: course.title, toc, lectures: this.lectures, exercises: this.exercises };
+    return { id, title: course.title, basePath: this.basePath, toc, lectures: this.lectures, exercises: this.exercises };
   }
 
   private async loadToc(
     entries: TocEntryInput[],
     yamlPath: PropertyKey[],
-    lineOf: (path: readonly PropertyKey[]) => number | undefined,
+    lineOf: LineOf,
   ): Promise<TocNode[]> {
     const nodes: TocNode[] = [];
     for (const [index, entry] of entries.entries()) {
@@ -80,18 +180,18 @@ class Loader {
     if (dirName.includes('/') || dirName.includes('\\') || dirName === '.' || dirName === '..') {
       this.issues.error(
         'lecture-missing',
-        COURSE_FILE,
-        `"${dirName}" must be the name of a directory directly inside ${LECTURES_DIR}/.`,
+        this.courseFile,
+        `"${dirName}" must be the name of a directory directly inside ${this.lecturesDir}/.`,
         line,
       );
       return undefined;
     }
     this.listedLectureDirs.add(dirName);
-    const dir = `${LECTURES_DIR}/${dirName}`;
+    const dir = `${this.lecturesDir}/${dirName}`;
     const file = `${dir}/${LECTURE_FILE}`;
     const source = await this.readText(file);
     if (source === undefined) {
-      this.issues.error('lecture-missing', COURSE_FILE, `Lecture "${dirName}" has no ${file}.`, line);
+      this.issues.error('lecture-missing', this.courseFile, `Lecture "${dirName}" has no ${file}.`, line);
       return undefined;
     }
     const parsed = parseYamlWithLines(source, file, this.issues, 'yaml-invalid');
@@ -101,12 +201,25 @@ class Loader {
 
     const idLine = parsed.lineOf(['id']);
     checkId(data.id, 'Lecture', file, this.issues, idLine);
-    if (this.lectureIds.has(data.id)) {
-      this.issues.error('lecture-id-duplicate', file, `Lecture id "${data.id}" is used by another lecture.`, idLine);
+    if (this.shared.lectureIds.has(data.id)) {
+      this.issues.error(
+        'lecture-id-duplicate',
+        file,
+        `Lecture id "${data.id}" is used by another lecture (in this or another course).`,
+        idLine,
+      );
     }
-    this.lectureIds.add(data.id);
+    this.shared.lectureIds.add(data.id);
 
-    const lecture: Lecture = { id: data.id, title: data.title, public: data.public === true, dir, parts: [] };
+    const lecture: Lecture = {
+      id: data.id,
+      courseId: this.courseId,
+      basePath: this.basePath,
+      title: lectureTitle(data.title),
+      public: data.public === true,
+      dir,
+      parts: [],
+    };
     const partIds = new Set<string>();
     for (const [index, partFile] of data.parts.entries()) {
       const partLine = parsed.lineOf(['parts', index]);
@@ -186,11 +299,11 @@ class Loader {
 
       const idLine = parsed.lineOf(['id']);
       checkId(data.id, 'Exercise', file, this.issues, idLine);
-      if (this.exercises.has(data.id)) {
+      if (this.shared.exercises.has(data.id)) {
         this.issues.error(
           'exercise-id-duplicate',
           file,
-          `Exercise id "${data.id}" is already used in another part; exercise ids must be unique in the whole course.`,
+          `Exercise id "${data.id}" is already used in another part; exercise ids must be unique in the whole repository (all courses).`,
           idLine,
         );
         return;
@@ -204,7 +317,8 @@ class Loader {
         }
         fieldIds.add(field.id);
       }
-      const exercise: Exercise = { ...data, lectureId, partId };
+      const exercise: Exercise = { ...data, courseId: this.courseId, lectureId, partId };
+      this.shared.exercises.set(exercise.id, exercise);
       this.exercises.set(exercise.id, exercise);
       exercises.push(exercise);
     });
@@ -217,29 +331,39 @@ class Loader {
       definitions.set(node.identifier, node);
     });
 
-    const images: { url: string; alt: string | null | undefined; line?: number }[] = [];
+    const refs: { kind: AssetRef['kind']; url: string; alt?: string | null; line?: number }[] = [];
     visit(tree, (node: Nodes) => {
+      const line = node.position?.start.line;
       if (node.type === 'image') {
-        images.push({ url: node.url, alt: node.alt, line: node.position?.start.line });
+        refs.push({ kind: 'image', url: node.url, alt: node.alt, line });
       } else if (node.type === 'imageReference') {
         const definition = definitions.get(node.identifier);
-        if (definition) images.push({ url: definition.url, alt: node.alt, line: node.position?.start.line });
+        if (definition) refs.push({ kind: 'image', url: definition.url, alt: node.alt, line });
+      } else if (node.type === 'link' || node.type === 'linkReference') {
+        const url = node.type === 'link' ? node.url : definitions.get(node.identifier)?.url;
+        if (url !== undefined && isFileLink(url)) refs.push({ kind: 'file', url, line });
       }
     });
 
     const assets: AssetRef[] = [];
-    for (const image of images) {
-      if (!image.alt?.trim()) {
-        this.issues.warning('image-alt-missing', file, `Image "${image.url}" has no alternative text.`, image.line);
+    for (const ref of refs) {
+      if (ref.kind === 'image' && !ref.alt?.trim()) {
+        this.issues.warning('image-alt-missing', file, `Image "${ref.url}" has no alternative text.`, ref.line);
       }
-      const asset = await this.resolveAsset(image.url, file, image.line);
+      const asset = await this.resolveAsset(ref.kind, ref.url, file, ref.line);
       if (asset) assets.push(asset);
     }
     return assets;
   }
 
-  private async resolveAsset(url: string, file: string, line: number | undefined): Promise<AssetRef | undefined> {
-    if (/^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith('//')) {
+  private async resolveAsset(
+    kind: AssetRef['kind'],
+    url: string,
+    file: string,
+    line: number | undefined,
+  ): Promise<AssetRef | undefined> {
+    const noun = kind === 'image' ? 'Image' : 'File';
+    if (isExternal(url)) {
       this.issues.warning(
         'asset-external',
         file,
@@ -250,16 +374,16 @@ class Loader {
     }
     let relative: string;
     try {
-      relative = decodeURIComponent(url.replace(/[?#].*$/, ''));
+      relative = decodeURIComponent(stripQuery(url));
     } catch {
-      this.issues.error('asset-path-invalid', file, `Image path "${url}" is not a valid URL path.`, line);
+      this.issues.error('asset-path-invalid', file, `${noun} path "${url}" is not a valid URL path.`, line);
       return undefined;
     }
     if (relative === '' || relative.startsWith('/')) {
       this.issues.error(
         'asset-path-invalid',
         file,
-        `Image path "${url}" must be relative to the Markdown file (e.g. "images/screen.png").`,
+        `${noun} path "${url}" must be relative to the Markdown file (e.g. "${kind === 'image' ? 'images/screen.png' : 'data/table.csv'}").`,
         line,
       );
       return undefined;
@@ -267,10 +391,10 @@ class Loader {
 
     const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), relative));
     if (resolved.startsWith('../') || resolved === '..') {
-      this.issues.error('asset-outside-repo', file, `Image "${url}" points outside the content repository.`, line);
+      this.issues.error('asset-outside-repo', file, `${noun} "${url}" points outside the content repository.`, line);
       return undefined;
     }
-    if (!IMAGE_EXTENSIONS.has(path.posix.extname(resolved).toLowerCase())) {
+    if (kind === 'image' && !IMAGE_EXTENSIONS.has(path.posix.extname(resolved).toLowerCase())) {
       this.issues.error(
         'asset-type-unsupported',
         file,
@@ -282,18 +406,18 @@ class Loader {
 
     const exists = await this.fileExistsExactCase(resolved);
     if (exists && !(await this.isInsideRoot(resolved))) {
-      this.issues.error('asset-outside-repo', file, `Image "${url}" is a link to a file outside the repository.`, line);
+      this.issues.error('asset-outside-repo', file, `${noun} "${url}" is a link to a file outside the repository.`, line);
       return undefined;
     }
     if (!exists) {
       this.issues.warning(
         'asset-missing',
         file,
-        `Image "${url}" was not found at "${resolved}" (paths are case-sensitive). The part will show a placeholder.`,
+        `${noun} "${url}" was not found at "${resolved}" (paths are case-sensitive). The part will show a placeholder.`,
         line,
       );
     }
-    return { url, path: resolved, exists, ...(line !== undefined ? { line } : {}) };
+    return { kind, url, path: resolved, exists, ...(line !== undefined ? { line } : {}) };
   }
 
   private checkDirectivesAndHtml(tree: Root, file: string): void {
@@ -357,13 +481,13 @@ class Loader {
   }
 
   private async reportUnlistedLectures(): Promise<void> {
-    for (const entry of await this.readDir(LECTURES_DIR)) {
-      const stats = await stat(path.join(this.root, LECTURES_DIR, entry)).catch(() => undefined);
+    for (const entry of await this.readDir(this.lecturesDir)) {
+      const stats = await stat(path.join(this.root, this.lecturesDir, entry)).catch(() => undefined);
       if (stats?.isDirectory() && !this.listedLectureDirs.has(entry)) {
         this.issues.warning(
           'lecture-unlisted',
-          `${LECTURES_DIR}/${entry}`,
-          `This lecture directory is not listed in ${COURSE_FILE} and will not be shown.`,
+          `${this.lecturesDir}/${entry}`,
+          `This lecture directory is not listed in ${this.courseFile} and will not be shown.`,
         );
       }
     }

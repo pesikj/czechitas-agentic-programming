@@ -3,7 +3,7 @@ id: prvni-cviceni
 title: První cvičení
 ---
 
-Spusťte agenta v terminálu.
+Spusťte agenta v terminálu. [Data](data/chybi.csv)
 
 ```exercise
 id: prvni-prompt

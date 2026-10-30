@@ -1,0 +1,89 @@
+---
+import CourseLayout from '../layouts/CourseLayout.astro';
+import ContentIssues from '../components/ContentIssues.astro';
+import HelpList from '../components/HelpList.astro';
+import type { Lecture, TocNode } from '../lib/content/types';
+import { visibleModel } from '../lib/content/visibility';
+import { homeContext, lectureHref } from '../lib/navigation';
+import type { CourseContent } from '../server/content/provider';
+
+interface Props {
+  /** The course to show, loaded by the page (which sets the response status). */
+  content: CourseContent;
+}
+
+const { content } = Astro.props;
+const { issues } = content;
+// Visitors see the title page with public lectures only.
+const signedIn = Boolean(Astro.locals.user);
+const model = visibleModel(content.model, signedIn);
+
+const lectures = new Map<string, Lecture>(model?.lectures.map((lecture) => [lecture.id, lecture]) ?? []);
+const partCount = (count: number) => (count === 1 ? '1 část' : count < 5 ? `${count} části` : `${count} částí`);
+
+// Flatten the toc into renderable items for the overview list.
+type Item = { kind: 'group'; title: string; children: Item[] } | { kind: 'lecture'; lecture: Lecture };
+const toItems = (nodes: TocNode[]): Item[] =>
+  nodes.flatMap((node): Item[] => {
+    if (node.kind === 'group') return [{ kind: 'group', title: node.title, children: toItems(node.children) }];
+    const lecture = lectures.get(node.lectureId);
+    return lecture ? [{ kind: 'lecture', lecture }] : [];
+  });
+const items = toItems(model?.toc ?? []);
+// Every visitor sees links to the other courses (their title pages list public lectures).
+const otherCourses = content.courses.filter((course) => course.id !== model?.id);
+---
+
+<CourseLayout title={model?.title ?? 'Obsah nelze načíst'} courseTitle={model?.title} model={model} context={homeContext(model, content.courses)}>
+  {
+    model ? (
+      <div class="home">
+        <h1>{model.title}</h1>
+        <p class="intro">
+          Materiály ke kurzu. Otevřete lekci a čtěte ji po částech. Lekci otevřete kliknutím nebo příkazem v řádku dole,
+          například <code>/open 1</code>. Mezi částmi se pohybujete příkazy <code>/next</code> a <code>/back</code> nebo
+          odkazy pod textem. Prakticky pracujete ve svém editoru a terminálu.
+        </p>
+        {otherCourses.map((course) => (
+          <p class="intro">
+            Další kurz: <a href={course.href}>{course.title}</a> (nebo příkazem <code>/course {course.id}</code>).
+          </p>
+        ))}
+        {!signedIn && (
+          <p class="intro">
+            {items.length > 0 ? 'Bez přihlášení vidíte jen veřejné lekce. ' : 'Lekce jsou dostupné po přihlášení. '}
+            <a href="/prihlaseni">Přihlaste se</a> a uvidíte celý kurz.
+          </p>
+        )}
+
+        {items.length > 0 && (
+          <section aria-labelledby="lekce">
+            <h2 id="lekce">Lekce</h2>
+            <ul class="lecture-list" role="list">
+              {items.map(function render(item: Item): unknown {
+                return item.kind === 'group' ? (
+                  <li>
+                    <span class="group-title">{item.title}</span>
+                    <ul role="list">{item.children.map(render)}</ul>
+                  </li>
+                ) : (
+                  <li>
+                    <a href={lectureHref(item.lecture)}>{item.lecture.title}</a>
+                    <span class="count">{partCount(item.lecture.parts.length)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        <section aria-labelledby="napoveda">
+          <h2 id="napoveda">Jak se pohybovat</h2>
+          <HelpList />
+        </section>
+      </div>
+    ) : (
+      <ContentIssues issues={issues} empty={content.state === 'empty'} />
+    )
+  }
+</CourseLayout>

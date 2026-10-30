@@ -7,6 +7,12 @@ const ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']);
 
+/** Files learners can download through ordinary links (data, code, archives). */
+export const FILE_EXTENSIONS = new Set([
+  '.csv', '.tsv', '.json', '.xml', '.yaml', '.yml', '.txt', '.md', '.xlsx', '.xls', '.parquet',
+  '.py', '.ipynb', '.js', '.ts', '.sql', '.sh', '.ps1', '.zip', '.pdf',
+]);
+
 const nonEmpty = z.string().trim().min(1);
 
 export type TocEntryInput = { lecture: string } | { title: string; items: TocEntryInput[] };
@@ -18,10 +24,26 @@ const tocEntrySchema: z.ZodType<TocEntryInput> = z.lazy(() =>
   ]),
 );
 
+/** The root `course.yaml`: the main course, which declares the additional courses. */
 export const courseSchema = z.strictObject({
+  id: nonEmpty.optional(),
+  title: nonEmpty,
+  /** Additional courses, each in the subdirectory of that name. */
+  courses: z.array(nonEmpty).optional(),
+  toc: z.array(tocEntrySchema).min(1),
+});
+
+/** `<course>/course.yaml` of an additional course: its id is the directory name. */
+export const additionalCourseSchema = z.strictObject({
   title: nonEmpty,
   toc: z.array(tocEntrySchema).min(1),
 });
+
+/** Top-level site routes, which an additional course (served under `/<id>/`) must not shadow. */
+export const RESERVED_COURSE_IDS = [
+  '404', '_astro', '_image', 'admin', 'health', 'hledat', 'lekce', 'moje-odpovedi', 'nahled-odpovedi',
+  'obnova-hesla', 'obsah', 'odhlaseni', 'odpovedi', 'prihlaseni', 'zapomenute-heslo', 'zmena-hesla',
+];
 
 export const lectureSchema = z.strictObject({
   id: nonEmpty,
@@ -126,8 +148,10 @@ export function checkSchema<T>(
   return undefined;
 }
 
-export function checkId(id: string, kind: string, file: string, issues: IssueCollector, line?: number): void {
-  if (!ID_PATTERN.test(id)) {
+/** Reports an id with characters not allowed in URLs; returns whether the id is valid. */
+export function checkId(id: string, kind: string, file: string, issues: IssueCollector, line?: number): boolean {
+  const valid = ID_PATTERN.test(id);
+  if (!valid) {
     issues.error(
       'id-invalid',
       file,
@@ -135,4 +159,5 @@ export function checkId(id: string, kind: string, file: string, issues: IssueCol
       line,
     );
   }
+  return valid;
 }

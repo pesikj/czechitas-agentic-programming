@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { completions, findCommand, runCommand, type CommandContext, type LectureTarget } from '../src/lib/commands';
+import { COMMANDS, completions, findCommand, runCommand, type CommandContext, type CourseTarget, type LectureTarget } from '../src/lib/commands';
 
 const lecture = (number: number, id: string, title: string, parts: string[]): LectureTarget => ({
   number,
@@ -124,6 +124,10 @@ describe('runCommand', () => {
 });
 
 describe('/search', () => {
+  it('is described as searching the current course only', () => {
+    expect(findCommand('search')?.description).toBe('Hledat v materiálech tohoto kurzu');
+  });
+
   it('opens search results, also via the Czech alias', () => {
     expect(navigateTo('/search prompt pro agenta')).toBe('/hledat?q=prompt%20pro%20agenta');
     expect(navigateTo('/hledat', middle)).toBe('/hledat');
@@ -227,5 +231,93 @@ describe('completions', () => {
 
   it('does not suggest arguments for other commands', () => {
     expect(values('/next 2')).toEqual([]);
+  });
+});
+
+describe('/course', () => {
+  const courses: CourseTarget[] = [
+    { number: 1, id: 'agent', title: 'Agentní programování', href: '/', basePath: '' },
+    { number: 2, id: 'data', title: 'Digitální akademie: Data', href: '/data/', basePath: '/data' },
+  ];
+  const multi: CommandContext = { page: 'home', lectures, courses, currentCourse: 'agent' };
+  const inData: CommandContext = { page: 'home', lectures, courses, currentCourse: 'data' };
+  const suggestions = [
+    { label: '1 Agentní programování (aktuální)', command: '/course agent' },
+    { label: '2 Digitální akademie: Data', command: '/course data' },
+  ];
+
+  it.each([
+    ['/course data', '/data/'],
+    ['/kurz 2', '/data/'],
+    ['/course 1', '/'],
+    ['/course akademie', '/data/'],
+  ])('%s → %s', (input, href) => {
+    expect(navigateTo(input, multi)).toBe(href);
+  });
+
+  it('lists the courses without an argument', () => {
+    const result = runCommand('/course', multi);
+    expect(result.kind).toBe('message');
+    if (result.kind === 'message') expect(result.suggestions).toEqual(suggestions);
+  });
+
+  it('reports a missing course number', () => {
+    expect(runCommand('/course 3', multi)).toEqual({
+      kind: 'message',
+      text: 'Kurz 3 neexistuje. K dispozici jsou 2 kurzy.',
+      suggestions,
+    });
+  });
+
+  it('reports an unmatched query', () => {
+    const result = runCommand('/course xyz', multi);
+    expect(result.kind === 'message' && result.text).toBe('Žádný kurz neodpovídá výrazu „xyz“.');
+  });
+
+  it('lists ambiguous matches', () => {
+    const both: CommandContext = {
+      page: 'home',
+      lectures,
+      courses: [
+        { number: 1, id: 'a', title: 'První kurz', href: '/', basePath: '' },
+        { number: 2, id: 'b', title: 'Druhý kurz', href: '/b/', basePath: '/b' },
+      ],
+    };
+    const result = runCommand('/course kurz', both);
+    expect(result.kind).toBe('message');
+    if (result.kind === 'message') {
+      expect(result.text).toBe('Výrazu „kurz“ odpovídá více kurzů:');
+      expect(result.suggestions.map((s) => s.command)).toEqual(['/course a', '/course b']);
+    }
+  });
+
+  it('says there is only one course when there are no others', () => {
+    const one: CommandContext = { page: 'home', lectures, courses: [courses[0]!] };
+    for (const ctx of [home, one]) {
+      const result = runCommand('/course data', ctx);
+      expect(result.kind === 'message' && result.text).toBe('K dispozici je jen jeden kurz.');
+    }
+  });
+
+  it('scopes /home and /search to the current course', () => {
+    expect(navigateTo('/home', inData)).toBe('/data/');
+    expect(navigateTo('/search tabulka', inData)).toBe('/data/hledat?q=tabulka');
+    expect(navigateTo('/home', multi)).toBe('/');
+    expect(navigateTo('/home', home)).toBe('/');
+    expect(navigateTo('/search x', home)).toBe('/hledat?q=x');
+  });
+
+  it('completes courses', () => {
+    const data = { value: '/course data', label: '/course data', description: 'Digitální akademie: Data' };
+    expect(completions('/course ', multi)).toEqual([
+      { value: '/course agent', label: '/course agent', description: 'Agentní programování' },
+      data,
+    ]);
+    expect(completions('/course d', multi)).toEqual([data]);
+    expect(completions('/kur', multi)).toContainEqual(expect.objectContaining({ label: '/course', value: '/course ' }));
+  });
+
+  it('is listed in help with the kurz alias', () => {
+    expect(COMMANDS.find((c) => c.name === 'course')?.aliases).toEqual(['kurz']);
   });
 });

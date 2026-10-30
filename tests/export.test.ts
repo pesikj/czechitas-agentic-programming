@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { exportFileName, responsesToMarkdown } from '../src/lib/export';
+import { exportCourseTitle, exportFileName, responsesToMarkdown } from '../src/lib/export';
 
 describe('Markdown export', () => {
   it('keeps answers verbatim with exercise and field labels', () => {
@@ -23,6 +23,37 @@ describe('Markdown export', () => {
     expect(markdown).toContain('Cvičení `prvni-prompt`, revize 2');
     expect(markdown).toContain('### Použitý prompt\n\n```text\nPřidej patičku\n```\n\n- **tučně**');
     expect(markdown).toContain('### Reflexe\n\n_(nevyplněno)_');
+  });
+
+  it('groups answers by course title when there are several courses', () => {
+    const record = (courseTitle: string, exerciseId: string) => ({
+      exerciseId,
+      exerciseRevision: 1,
+      exerciseTitle: exerciseId,
+      lectureTitle: null,
+      partTitle: null,
+      courseTitle,
+      fieldLabels: { a: 'Pole' },
+      fields: { a: 'Text' },
+      savedAt: new Date('2026-10-05T10:00:00Z'),
+    });
+    const markdown = responsesToMarkdown([record('A', 'prvni'), record('B', 'druhe')], { title: 'Odpovědi' });
+    expect(markdown).toContain('## A\n');
+    expect(markdown).toContain('## B\n');
+    expect(markdown).toContain('### prvni\n');
+    expect(markdown).toContain('#### Pole\n\nText');
+    expect(markdown.indexOf('## A')).toBeLessThan(markdown.indexOf('## B'));
+
+    const single = responsesToMarkdown([record('A', 'prvni')], { title: 'Odpovědi' });
+    expect(single).not.toContain('## A');
+    expect(single).toContain('## prvni\n');
+    expect(single).toContain('### Pole\n');
+  });
+
+  it('names the course in a subtitle only when there is exactly one', () => {
+    expect(exportCourseTitle([{ title: 'Data' }])).toBe('Data');
+    expect(exportCourseTitle([{ title: 'Agent' }, { title: 'Data' }])).toBeUndefined();
+    expect(exportCourseTitle([])).toBeUndefined();
   });
 
   it('builds safe file names', () => {

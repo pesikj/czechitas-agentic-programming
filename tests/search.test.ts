@@ -4,7 +4,7 @@ import { loadContent } from '../src/lib/content/index';
 import { buildSearchIndex, fold, search } from '../src/lib/search';
 
 const { model } = await loadContent(path.resolve('fixtures/content/e2e'));
-const index = buildSearchIndex(model!);
+const index = buildSearchIndex(model!.courses[0]!);
 
 describe('search', () => {
   it('folds case and diacritics without changing length', () => {

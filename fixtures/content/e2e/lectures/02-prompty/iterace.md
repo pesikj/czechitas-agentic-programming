@@ -60,3 +60,13 @@ Dlouhý odstavec pro kontrolu zalamování českého textu: příliš žluťouč
 ## Oddíl 8
 
 Dlouhý odstavec pro kontrolu zalamování českého textu: příliš žluťoučký kůň úpěl ďábelské ódy, a velmi_dlouhy_identifikator_bez_mezer_ktery_se_musi_zalomit_aby_stranka_neposkakovala_do_strany. Dlouhý odstavec pro kontrolu zalamování českého textu: příliš žluťoučký kůň úpěl ďábelské ódy, a velmi_dlouhy_identifikator_bez_mezer_ktery_se_musi_zalomit_aby_stranka_neposkakovala_do_strany. Dlouhý odstavec pro kontrolu zalamování českého textu: příliš žluťoučký kůň úpěl ďábelské ódy, a velmi_dlouhy_identifikator_bez_mezer_ktery_se_musi_zalomit_aby_stranka_neposkakovala_do_strany. 
+
+Schéma postupu:
+
+```mermaid
+flowchart LR
+    accTitle: Postup iterace
+    zadani["Zadání"] --> vysledek["Výsledek"]
+    vysledek -->|"Neodpovídá"| upresneni["Upřesnit prompt"]
+    upresneni --> vysledek
+```

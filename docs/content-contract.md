@@ -1,26 +1,34 @@
 # Content contract
 
-How the content repository (`czechitas-agentic-programming-content`) describes course materials for the website. It defines the **input format**, not the syllabus: lectures, parts and their order come entirely from the repository.
+How the content repository (`czechitas-agentic-programming-content`) describes course materials for the website. It defines the **input format**, not the syllabus: courses, lectures, parts and their order come entirely from the repository.
 
 Implementation: `src/lib/content/` · Validate a checkout: `npm run content:validate -- <dir>`
 
 ## Repository layout
 
 ```
-course.yaml                  # course title and ordered navigation
+course.yaml                  # main course: id, title, additional courses, ordered navigation
 lectures/
   <directory>/               # any directory name, e.g. 01-uvod
     lecture.yaml             # lecture id, title, ordered parts
     <part>.md                # one file per lecture part
     images/…                 # images (any subdirectory is fine)
+data/                        # an additional course, listed in the root course.yaml
+  course.yaml                # its title and ordered navigation
+  lectures/…                 # same layout as above
 ```
+
+The main course lives at the repository root. Each additional course lives in a subdirectory named after its id and follows the same rules relative to that directory. All courses are validated and published together. Reported file paths and image and file paths stay **relative to the repository root** (e.g. `data/lectures/01-tabulky/images/graf.png`).
 
 Files and directories can be renamed or moved freely: **identity comes from ids, never from paths.**
 
 ## `course.yaml`
 
 ```yaml
+id: agent                    # optional, default "agent"; the main course's id
 title: Agentní programování s Codex CLI a Claude Code
+courses:                     # optional; additional courses, each in the directory of that name
+  - data
 toc:
   - title: Začínáme          # a group (nested navigation)
     items:
@@ -31,6 +39,8 @@ toc:
 
 - `toc` order is the navigation order. Groups can be nested and contain at least one item.
 - A directory in `lectures/` that is not listed is reported as a warning and is not shown.
+- `courses` order is the course order (`/course 2` is the first additional course). An additional course id follows the id pattern and becomes its URL prefix (`/data/`), so it must not be the main course id or a site address: `404`, `_astro`, `_image`, `admin`, `health`, `hledat`, `lekce`, `moje-odpovedi`, `nahled-odpovedi`, `obnova-hesla`, `obsah`, `odhlaseni`, `odpovedi`, `prihlaseni`, `zapomenute-heslo`, `zmena-hesla`.
+- An additional course's `<id>/course.yaml` has only `title` and `toc` (its id is the directory name; it cannot declare further courses).
 
 ## `lecture.yaml`
 
@@ -43,7 +53,8 @@ parts:
   - 02-instalace.md
 ```
 
-- `public` (optional, default `false`): when `true`, anyone can read the lecture and its images without an account, and the title page and sign-in page link to it. Use it for material learners need before the course, such as tool installation. Everything else stays sign-in only.
+- `title` is shown as written. The site adds no lecture numbers of its own, so number lectures in the title if you want them (`01 – Instalace nástrojů`); leading zeros are dropped on the site (`1 – Instalace nástrojů`).
+- `public` (optional, default `false`): when `true`, anyone can read the lecture, its images and its linked files without an account, and the title page and sign-in page link to it. Use it for material learners need before the course, such as tool installation. Everything else stays sign-in only.
 - `parts` order is the part order (**Část 1 z N**). The paths are relative to the lecture directory and must be `.md` files inside it.
 - A `.md` file in the lecture directory that is not listed is reported as a warning.
 
@@ -65,12 +76,13 @@ title: Co je programovací agent
 
 | Id | Pattern | Unique within | Used for |
 |---|---|---|---|
-| Lecture `id` | `^[a-z0-9]+(-[a-z0-9]+)*$` | course | URL `/lekce/<lectureId>/<partId>` |
+| Course `id` | `^[a-z0-9]+(-[a-z0-9]+)*$` | repository | URL prefix of an additional course `/<courseId>/` |
+| Lecture `id` | same | **whole repository** (all courses) | URL `/lekce/<lectureId>/<partId>` |
 | Part `id` | same | its lecture | URL, bookmarks |
-| Exercise `id` | same | **whole course** | linking saved responses |
+| Exercise `id` | same | **whole repository** (all courses) | linking saved responses |
 | Field `id` | same | its exercise | keys of saved response fields |
 
-Use lowercase letters without diacritics, digits and single hyphens. **Do not change an id once published.** Changing it breaks bookmarks, and for exercises it detaches the saved responses (the old responses stay readable by administrators).
+Use lowercase letters without diacritics, digits and single hyphens. **Do not change an id once published.** Changing it breaks bookmarks, and for exercises it detaches the saved responses (the old responses stay readable by administrators). **Never reuse a published exercise id, in either course**, even after the exercise is removed: learners' old answers would attach to the new exercise. Validation cannot detect this.
 
 ## Exercises
 
@@ -127,6 +139,7 @@ The same dialect is used for course pages, learner response previews and adminis
   | `prompt` | **Prompt pro agenta** | yes |
   | `output` | **Výstup** (expected output) | no |
   | `text`, `txt`, `plaintext` or none | neutral block, no label | yes |
+  | `mermaid` | **Diagram**: drawn from the [Mermaid](https://mermaid.js.org) source in the learner's colour theme; the source stays available under it. Without JavaScript, or if the source is invalid, it is shown as code | no |
   | any other language, e.g. `python` | **Kód (python)** | yes |
 
 ## Images
@@ -137,23 +150,33 @@ The same dialect is used for course pages, learner response previews and adminis
 - Images are served only to signed-in users. External image URLs are reported as a warning and are **not displayed**: the site's Content Security Policy loads images only from itself, so they cannot bypass sign-in or reveal learners to other servers.
 - Missing alternative text → warning. A missing file → warning; the part still loads and shows a placeholder.
 
+## Linked files
+
+- Link to data, code or other material with an ordinary Markdown link: `[prodeje](data/prodeje.csv)`, `[skript](skripty/analyza.py)`. Reference-style links work too.
+- Paths follow the image rules: **relative to the Markdown file**, inside the repository, **case-sensitive**.
+- Downloadable types: `.csv .tsv .json .xml .yaml .yml .txt .md .xlsx .xls .parquet .py .ipynb .js .ts .sql .sh .ps1 .zip .pdf`. Links to other paths (websites, site pages like `/hledat`, `#anchors`, other extensions) are left as written.
+- Files are served only to signed-in users (or with a public lecture) and always as a **download**; the browser never opens or runs them. Only files linked from the content are served, never the rest of the repository.
+- A missing file → warning; the part still loads and shows a placeholder instead of the link. A path outside the repository → error.
+
 ## Validation
 
 `loadContent()` returns a model only when there are **no errors**. Publishing (milestone 4) refuses a revision with errors and keeps the previous one. Warnings are shown to the administrator but do not block publishing. Each issue has a severity, a code, a file and, where possible, a line.
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `course-missing` | error | No `course.yaml` |
+| `course-missing` | error | No `course.yaml` at the root or in a listed course directory |
+| `course-id-reserved` | error | An additional course id is the main course id or a site address |
+| `course-id-duplicate` | error | An additional course is listed twice in `courses` |
 | `yaml-invalid` | error | YAML syntax error |
 | `schema-invalid` | error | Missing or unknown keys, wrong types, missing front matter |
 | `id-invalid` | error | Id does not match the pattern |
 | `lecture-missing` | error | A listed lecture directory or its `lecture.yaml` is missing |
-| `lecture-id-duplicate` / `part-id-duplicate` | error | Duplicate id |
+| `lecture-id-duplicate` / `part-id-duplicate` | error | Duplicate id (lecture ids across all courses) |
 | `part-missing` / `part-path-invalid` | error | A listed part does not exist or is not a `.md` file inside the lecture |
 | `exercise-invalid` | error | Malformed exercise YAML or schema |
-| `exercise-id-duplicate` / `field-id-duplicate` | error | Duplicate exercise or field id |
+| `exercise-id-duplicate` / `field-id-duplicate` | error | Duplicate exercise id (across all courses) or field id |
 | `alternatives-invalid` | error | Malformed alternatives block |
-| `asset-path-invalid` / `asset-outside-repo` / `asset-type-unsupported` | error | Unusable image path |
+| `asset-path-invalid` / `asset-outside-repo` / `asset-type-unsupported` | error | Unusable image or linked-file path |
 | `lecture-unlisted` / `part-unlisted` | warning | A file or directory exists but is not listed |
-| `asset-missing` / `asset-external` / `image-alt-missing` | warning | Image problems that do not block the part |
+| `asset-missing` / `asset-external` / `image-alt-missing` | warning | Image or linked-file problems that do not block the part |
 | `raw-html-ignored` / `directive-unknown` | warning | Unsupported syntax, shown as text or dropped |

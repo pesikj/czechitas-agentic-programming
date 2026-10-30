@@ -30,6 +30,7 @@ export function parseMarkdown(source: string, mode: MarkdownMode): Root {
 }
 
 export type ImageResolution = { src: string; width?: number; height?: number } | { missing: true };
+export type LinkResolution = { href: string } | { missing: true };
 
 export interface RenderOptions {
   mode: MarkdownMode;
@@ -38,13 +39,15 @@ export interface RenderOptions {
    * unchanged (e.g. external images); `{ missing: true }` renders a readable fallback.
    */
   resolveImage?: (url: string) => ImageResolution | undefined;
+  /** Maps an authored link URL to its target, like `resolveImage` (e.g. downloadable files). */
+  resolveLink?: (url: string) => LinkResolution | undefined;
   /** Demotes headings (e.g. 1: `#` becomes h2) so the page keeps a single h1. */
   shiftHeadings?: number;
   /** Removes a leading heading with this text, when the page already shows it as the title. */
   omitLeadingHeading?: string;
 }
 
-export type CodeKind = 'terminal' | 'prompt' | 'output' | 'text' | 'code';
+export type CodeKind = 'terminal' | 'prompt' | 'output' | 'text' | 'diagram' | 'code';
 
 const TERMINAL_LANGS = new Set(['bash', 'sh', 'shell', 'zsh', 'console', 'powershell', 'ps1', 'pwsh', 'cmd', 'bat']);
 const TEXT_LANGS = new Set(['', 'text', 'txt', 'plaintext']);
@@ -55,6 +58,8 @@ function codeKind(lang: string | null | undefined): { kind: CodeKind; label?: st
   if (TERMINAL_LANGS.has(language)) return { kind: 'terminal', label: 'Terminál' };
   if (language === 'prompt') return { kind: 'prompt', label: 'Prompt pro agenta' };
   if (language === 'output') return { kind: 'output', label: 'Výstup' };
+  // Drawn in the browser (src/scripts/diagrams.ts); the source is the fallback.
+  if (language === 'mermaid') return { kind: 'diagram', label: 'Diagram' };
   if (TEXT_LANGS.has(language)) return { kind: 'text' };
   return { kind: 'code', label: `Kód (${language})` };
 }
@@ -78,9 +83,10 @@ const sanitizeSchema: SanitizeSchema = {
       ['className', 'footnotes', 'alternative'],
       'dataLabel',
     ],
-    span: [...withoutClassName(defaultSchema.attributes?.span), ['className', 'code-label', 'image-missing']],
+    span: [...withoutClassName(defaultSchema.attributes?.span), ['className', 'code-label', 'image-missing', 'file-missing']],
     p: [...withoutClassName(defaultSchema.attributes?.p), ['className', 'alternative-label']],
     img: [...(defaultSchema.attributes?.img ?? []), 'loading', 'decoding', 'width', 'height'],
+    a: [...(defaultSchema.attributes?.a ?? []), 'download'],
   },
 };
 
@@ -145,6 +151,24 @@ function transformTree(tree: Root, source: string, options: RenderOptions): void
       const replacement = resolution && parent.type !== 'link' ? { type: 'link', url: src, children: [image] } : image;
       parent.children.splice(index, 1, replacement as never);
       return [SKIP, index + 1];
+    }
+
+    if (node.type === 'link' || node.type === 'linkReference') {
+      const url = node.type === 'link' ? node.url : definitions.get(node.identifier);
+      const resolution = url === undefined ? undefined : options.resolveLink?.(url);
+      if (!resolution) return;
+      if ('missing' in resolution) {
+        parent.children.splice(index, 1, {
+          type: 'emphasis',
+          children: [{ type: 'text', value: `[Soubor není k dispozici: ${toText(node) || url}]` }],
+          data: { hName: 'span', hProperties: { className: ['file-missing'] } },
+        } as never);
+        return [SKIP, index + 1];
+      }
+      // Rewritten in place, so children (e.g. an image) are visited with a `link` parent.
+      // `download` keeps the unsaved-answer guard from treating the click as leaving the page.
+      Object.assign(node, { type: 'link', url: resolution.href, data: { hProperties: { download: true } } });
+      return;
     }
 
     if (node.type === 'code' && !(options.mode === 'content' && node.lang === EXERCISE_LANG)) {

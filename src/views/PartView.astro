@@ -1,0 +1,107 @@
+---
+import CourseLayout from '../layouts/CourseLayout.astro';
+import ContentIssues from '../components/ContentIssues.astro';
+import ExercisePanel from '../components/ExercisePanel.astro';
+import PartPager from '../components/PartPager.astro';
+import {
+  courseHref,
+  findLecture,
+  findPart,
+  lectureHref,
+  otherContext,
+  partContext,
+  partFileName,
+} from '../lib/navigation';
+import { visibleModel } from '../lib/content/visibility';
+import { getRenderedPart, type CourseContent } from '../server/content/provider';
+import { getResponse } from '../server/responses';
+
+interface Props {
+  /** The course to show, loaded by the page (which sets the response status). */
+  content: CourseContent;
+}
+
+// The page has already answered for an unknown course or lecture and set the status.
+const { content } = Astro.props;
+const { issues } = content;
+const user = Astro.locals.user;
+// Signed-out visitors (on a public lecture) see only the public lectures.
+const model = visibleModel(content.model, Boolean(user));
+const lecture = model && findLecture(model, Astro.params.lectureId ?? '');
+const part = lecture && findPart(lecture, Astro.params.partId ?? '');
+
+const context = model && lecture && part ? partContext(model, lecture, part, content.courses) : otherContext(model, content.courses);
+const html = part ? await getRenderedPart(part) : '';
+// The renderer leaves a placeholder where each exercise panel belongs.
+const segments = html.split(/<div class="exercise" data-exercise-id="([^"]*)"><\/div>/);
+const saved = new Map(
+  user
+    ? await Promise.all(
+        (part?.exercises ?? []).map(async (exercise) => [exercise.id, await getResponse(user.id, exercise.id)] as const),
+      )
+    : [],
+);
+const returnPath = Astro.url.pathname;
+const outcomeFor = (exerciseId: string) =>
+  Astro.url.searchParams.get('ulozeno') === exerciseId ? 'saved' : Astro.url.searchParams.get('chyba') === exerciseId ? 'error' : undefined;
+---
+
+<CourseLayout
+  title={part?.title ?? 'Část nenalezena'}
+  courseTitle={model?.title}
+  model={model}
+  current={lecture && part ? { lectureId: lecture.id, partId: part.id } : undefined}
+  crumbs={lecture
+    ? [{ label: lecture.id, href: lectureHref(lecture) }, ...(part ? [{ label: partFileName(part) }] : [{ label: '?' }])]
+    : []}
+  context={context}
+>
+  {!model && <ContentIssues issues={issues} empty={content.state === 'empty'} />}
+  {
+    model && lecture && !part && (
+      <div class="message-page">
+        <h1>Tato část už neexistuje nebo byla přesunuta</h1>
+        <p>
+          Odkaz vede na část lekce „{lecture.title}“, která v aktuálních materiálech není. Mohla být přejmenována,
+          přesunuta nebo odstraněna.
+        </p>
+        <ul>
+          <li>
+            <a href={lectureHref(lecture)}>Otevřít začátek lekce „{lecture.title}“</a>
+          </li>
+          <li>
+            <a href={courseHref(model)}>Zpět na přehled lekcí</a>
+          </li>
+        </ul>
+      </div>
+    )
+  }
+  {
+    lecture && part && context.page === 'part' && (
+      <article class="part">
+        <header class="part-header">
+          <p class="lecture-title">{lecture.title}</p>
+          <h1>{part.title}</h1>
+          <p class="position">
+            Část {part.number} z {lecture.parts.length}
+          </p>
+        </header>
+        <div class="prose">
+          {segments.map((segment, index) =>
+            index % 2 === 0 ? (
+              <Fragment set:html={segment} />
+            ) : (
+              <ExercisePanel
+                exercise={model?.exercises.get(segment)}
+                saved={saved.get(segment)}
+                returnPath={returnPath}
+                outcome={outcomeFor(segment)}
+              />
+            ),
+          )}
+        </div>
+        <PartPager context={context} />
+      </article>
+    )
+  }
+</CourseLayout>

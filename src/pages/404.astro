@@ -2,13 +2,14 @@
 import CourseLayout from '../layouts/CourseLayout.astro';
 import { otherContext } from '../lib/navigation';
 import { visibleModel } from '../lib/content/visibility';
-import { getContent } from '../server/content/provider';
+import { getCourseContent } from '../server/content/provider';
 
-const model = visibleModel((await getContent()).model, Boolean(Astro.locals.user));
+const content = await getCourseContent();
+const model = visibleModel(content.model, Boolean(Astro.locals.user));
 Astro.response.status = 404;
 ---
 
-<CourseLayout title="Stránka nenalezena" courseTitle={model?.title} model={model} context={otherContext(model)}>
+<CourseLayout title="Stránka nenalezena" courseTitle={model?.title} model={model} context={otherContext(model, content.courses)}>
   <div class="message-page">
     <h1>Stránka nenalezena</h1>
     <p>Tato adresa v materiálech kurzu neexistuje. Lekce mohla být přesunuta nebo přejmenována.</p>

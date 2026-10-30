@@ -1,12 +1,12 @@
 // "Aktualizovat obsah" against a real git repository and database.
-import { readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
+import { cpSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { getDb } from '../../src/server/db/client';
 import { contentAssets, contentSnapshots } from '../../src/server/db/schema';
-import { activateSnapshot, getContent, getRenderedPart, resolveAsset, searchContent } from '../../src/server/content/provider';
+import { activateSnapshot, getContent, getCourseContent, getRenderedPart, getRoutedCourseContent, resolveAsset, searchContent } from '../../src/server/content/provider';
 import { getActiveRevision, publishContent } from '../../src/server/content/publish';
 import { CHECKOUT_PREFIX, repositorySettings } from '../../src/server/content/repository';
 import { TEST_CONTENT_REPO } from '../../vitest.config';
@@ -16,10 +16,12 @@ const file = (relative: string) => path.join(TEST_CONTENT_REPO, relative);
 const edit = (relative: string, change: (text: string) => string) =>
   writeFileSync(file(relative), change(readFileSync(file(relative), 'utf8')));
 const IMAGE = 'lectures/01-zaklady/images/schema.png';
+const DATA_IMAGE = 'data/lectures/01-tabulky/images/graf.png';
+const ASSETS = [IMAGE, 'lectures/01-zaklady/skripty/analyza.py', 'lectures/01-zaklady/soubory/prodeje.csv'];
 
 const storedRevisions = async () => (await getDb().select({ id: contentSnapshots.revisionId }).from(contentSnapshots)).map((row) => row.id);
 const storedAssets = async (revisionId: string) =>
-  (await getDb().select({ path: contentAssets.path }).from(contentAssets).where(eq(contentAssets.revisionId, revisionId))).map((row) => row.path);
+  (await getDb().select({ path: contentAssets.path }).from(contentAssets).where(eq(contentAssets.revisionId, revisionId)).orderBy(contentAssets.path)).map((row) => row.path);
 const leftoverCheckouts = () => readdirSync(os.tmpdir()).filter((name) => name.startsWith(CHECKOUT_PREFIX));
 /** Forgets the in-memory snapshot, as a fresh server process would. */
 const forgetSnapshot = () => activateSnapshot({ result: { issues: [] }, assets: new Map(), rendered: new Map(), search: [] });
@@ -28,30 +30,33 @@ describe('content publishing', () => {
   it('starts empty, then publishes the branch only when an admin runs the update', async () => {
     const checkoutsBefore = leftoverCheckouts();
     expect((await getContent()).state).toBe('empty');
+    // Before the first publish no additional course is known, so no first segment is a course.
+    expect(await getRoutedCourseContent('neexistuje')).toBeUndefined();
+    expect(await getRoutedCourseContent('data')).toBeUndefined();
 
     const first = await publishContent(null);
     expect(first.status).toBe('activated');
     if (first.status !== 'activated') return;
     expect(first.revision.commitSha).toMatch(/^[0-9a-f]{40}$/);
     expect(await storedRevisions()).toEqual([first.revision.id]);
-    expect(await storedAssets(first.revision.id)).toEqual([IMAGE]);
+    expect(await storedAssets(first.revision.id)).toEqual(ASSETS);
     expect(leftoverCheckouts()).toEqual(checkoutsBefore);
 
-    const content = await getContent();
+    const content = await getCourseContent();
     expect(content.state).toBe('ready');
     expect(content.model?.title).toBe('Testovací kurz');
     const image = await resolveAsset(IMAGE);
     expect(image?.body).toEqual(readFileSync(file(IMAGE)));
-    expect((await searchContent('úvod')).map((hit) => hit.partTitle)).toContain('Úvod');
+    expect((await searchContent('úvod', 'agent')).map((hit) => hit.partTitle)).toContain('Úvod');
 
     // A repository edit stays invisible until the next update.
     edit('course.yaml', (text) => text.replace('Testovací kurz', 'Upravený kurz'));
     commitAll(TEST_CONTENT_REPO, 'Rename course');
-    expect((await getContent()).model?.title).toBe('Testovací kurz');
+    expect((await getCourseContent()).model?.title).toBe('Testovací kurz');
 
     const second = await publishContent(null);
     expect(second.status === 'activated' && second.unchanged).toBe(false);
-    expect((await getContent()).model?.title).toBe('Upravený kurz');
+    expect((await getCourseContent()).model?.title).toBe('Upravený kurz');
     expect((await getActiveRevision())?.id).toBe(second.status === 'activated' ? second.revision.id : undefined);
     // Only the active revision keeps its stored content.
     expect(await storedRevisions()).toEqual([second.status === 'activated' ? second.revision.id : undefined]);
@@ -97,13 +102,14 @@ describe('content publishing', () => {
 
   it('serves the stored content after a restart', async () => {
     forgetSnapshot();
-    const content = await getContent();
+    const content = await getCourseContent();
     expect(content.state).toBe('ready');
     expect(content.model?.exercises.size).toBeGreaterThan(0);
+    expect(content.catalog?.exercises.size).toBe(content.model?.exercises.size);
     const part = content.model!.lectures[0]!.parts[0]!;
     expect(await getRenderedPart(part)).toContain('src="/obsah/lectures/01-zaklady/images/schema.png"');
     expect((await resolveAsset(IMAGE))?.body).toEqual(readFileSync(file(IMAGE)));
-    expect((await searchContent('úvod')).length).toBeGreaterThan(0);
+    expect((await searchContent('úvod', 'agent')).length).toBeGreaterThan(0);
   });
 
   it('rebuilds a missing snapshot from its commit', async () => {
@@ -114,10 +120,74 @@ describe('content publishing', () => {
     await getDb().delete(contentSnapshots);
     forgetSnapshot();
 
-    const content = await getContent();
+    const content = await getCourseContent();
     expect(content.state).toBe('ready');
     expect(content.model?.title).toBe('Upravený kurz');
     expect(await storedRevisions()).toEqual([active.id]);
-    expect(await storedAssets(active.id)).toEqual([IMAGE]);
+    expect(await storedAssets(active.id)).toEqual(ASSETS);
+  });
+
+  it('retries a failed rebuild on the next request', async () => {
+    const active = (await getActiveRevision())!;
+    await getDb().delete(contentSnapshots);
+    forgetSnapshot();
+
+    // The commit cannot be checked out while the repository is away.
+    renameSync(TEST_CONTENT_REPO, `${TEST_CONTENT_REPO}.away`);
+    try {
+      await expect(getContent()).rejects.toThrow();
+    } finally {
+      renameSync(`${TEST_CONTENT_REPO}.away`, TEST_CONTENT_REPO);
+    }
+
+    expect((await getContent()).state).toBe('ready');
+    expect(await storedRevisions()).toEqual([active.id]);
+  });
+
+  it('publishes every course of the repository in one revision', async () => {
+    cpSync(path.resolve('fixtures/content/courses/data'), file('data'), { recursive: true });
+    edit('course.yaml', (text) => `${text}courses:\n  - data\n`);
+    commitAll(TEST_CONTENT_REPO, 'Add the data course');
+
+    const result = await publishContent(null);
+    expect(result.status).toBe('activated');
+    if (result.status !== 'activated') return;
+    const data = await getCourseContent('data');
+    expect([data.state, data.model?.title]).toEqual(['ready', 'Digitální akademie: Data']);
+    expect(await storedAssets(result.revision.id)).toEqual([DATA_IMAGE, ...ASSETS]);
+    expect((await resolveAsset(DATA_IMAGE))?.body).toEqual(readFileSync(file(DATA_IMAGE)));
+  });
+
+  it('keeps the previous revision when an additional course is invalid', async () => {
+    const before = await getActiveRevision();
+    edit('data/course.yaml', (text) => text.replace('title:', 'nazev:'));
+    commitAll(TEST_CONTENT_REPO, 'Break the data course');
+
+    const result = await publishContent(null);
+    expect(result.status).toBe('failed');
+    if (result.status !== 'failed') return;
+    expect(result.issues.map((issue) => [issue.code, issue.file])).toContainEqual(['schema-invalid', 'data/course.yaml']);
+    expect((await getActiveRevision())?.id).toBe(before?.id);
+    expect((await getCourseContent('data')).model?.title).toBe('Digitální akademie: Data');
+
+    edit('data/course.yaml', (text) => text.replace('nazev:', 'title:'));
+    commitAll(TEST_CONTENT_REPO, 'Fix the data course');
+    expect((await publishContent(null)).status).toBe('activated');
+  });
+
+  it('replaces a snapshot stored before multiple courses', async () => {
+    const active = (await getActiveRevision())!;
+    const { title, toc, lectures } = (await getCourseContent()).model!;
+    await getDb()
+      .update(contentSnapshots)
+      .set({ model: { title, toc, lectures } as never })
+      .where(eq(contentSnapshots.revisionId, active.id));
+    forgetSnapshot();
+
+    expect((await getCourseContent('data')).model?.title).toBe('Digitální akademie: Data');
+    const [row] = await getDb().select({ model: contentSnapshots.model }).from(contentSnapshots);
+    expect(row?.model.courses.map((course) => course.id)).toEqual(['agent', 'data']);
+    expect(await storedRevisions()).toEqual([active.id]);
+    expect(await storedAssets(active.id)).toEqual([DATA_IMAGE, ...ASSETS]);
   });
 });

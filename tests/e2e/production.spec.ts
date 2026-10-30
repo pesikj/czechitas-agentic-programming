@@ -56,4 +56,12 @@ test('production build: CSP is set and pages work under it', async ({ page }) =>
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-webtui-theme', 'dark');
   expect(violations).toEqual([]);
+
+  // Mermaid is loaded on demand and draws its diagram as an image. While drawing, it applies inline
+  // styles to a hidden working copy, which the CSP blocks; the image itself is unaffected. Anything
+  // else blocked (e.g. a script) is still a failure.
+  await page.goto(`${PROD}/lekce/prace-s-promptem/iterace`);
+  await page.locator('.code-block[data-kind="diagram"]').scrollIntoViewIfNeeded();
+  await expect(page.getByRole('img', { name: 'Diagram: Postup iterace' })).toBeVisible();
+  expect(violations.filter((violation) => !/^Applying inline style violates/.test(violation))).toEqual([]);
 });

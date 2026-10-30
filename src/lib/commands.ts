@@ -17,14 +17,32 @@ export interface LectureTarget {
   parts: PartTarget[];
 }
 
+/** A course as the command bar sees it. */
+export interface CourseTarget {
+  /** 1-based, in declaration order (main course first). */
+  number: number;
+  id: string;
+  title: string;
+  /** The course's title page: `/` for the main course, `/<id>/` otherwise. */
+  href: string;
+  /** URL prefix of the course's routes: `''` for the main course, `/<id>` otherwise. */
+  basePath: string;
+}
+
+interface CourseFields {
+  courses?: CourseTarget[];
+  /** A course id; absent means the first course. */
+  currentCourse?: string;
+}
+
 interface Destination {
   title: string;
   href: string;
 }
 
 export type CommandContext =
-  | { page: 'home'; lectures: LectureTarget[] }
-  | {
+  | ({ page: 'home'; lectures: LectureTarget[] } & CourseFields)
+  | ({
       page: 'part';
       lectures: LectureTarget[];
       lectureNumber: number;
@@ -32,8 +50,8 @@ export type CommandContext =
       next?: Destination;
       previousLecture?: LectureTarget;
       nextLecture?: LectureTarget;
-    }
-  | { page: 'other'; lectures: LectureTarget[] };
+    } & CourseFields)
+  | ({ page: 'other'; lectures: LectureTarget[] } & CourseFields);
 
 export interface Suggestion {
   label: string;
@@ -47,7 +65,7 @@ export type CommandResult =
   | { kind: 'help' }
   | { kind: 'message'; text: string; suggestions: Suggestion[] };
 
-export type CommandName = 'next' | 'back' | 'open' | 'search' | 'home' | 'help';
+export type CommandName = 'next' | 'back' | 'open' | 'search' | 'course' | 'home' | 'help';
 
 export interface CommandDefinition {
   name: CommandName;
@@ -70,8 +88,14 @@ export const COMMANDS: readonly CommandDefinition[] = [
   {
     name: 'search',
     aliases: ['hledat'],
-    description: 'Hledat ve všech materiálech',
+    description: 'Hledat v materiálech tohoto kurzu',
     examples: ['/search prompt'],
+  },
+  {
+    name: 'course',
+    aliases: ['kurz'],
+    description: 'Přepnout na jiný kurz podle čísla, názvu nebo id',
+    examples: ['/course data', '/course 1'],
   },
   { name: 'home', aliases: ['domu'], description: 'Úvodní stránka s přehledem lekcí' },
   { name: 'help', aliases: ['napoveda', '?'], description: 'Nápověda k příkazům' },
@@ -120,6 +144,17 @@ const lectureSuggestion = (lecture: LectureTarget): Suggestion => ({
   command: `/open ${lecture.number}`,
 });
 
+const courseSuggestion = (course: CourseTarget, current?: CourseTarget): Suggestion => ({
+  label: `${course.number} ${course.title}${course === current ? ' (aktuální)' : ''}`,
+  command: `/course ${course.id}`,
+});
+
+/** The course the context belongs to (the first one when unspecified). */
+function currentCourseOf(context: CommandContext): CourseTarget | undefined {
+  const courses = context.courses ?? [];
+  return courses.find((course) => course.id === context.currentCourse) ?? courses[0];
+}
+
 export function runCommand(input: string, context: CommandContext): CommandResult {
   const raw = input.trim();
   if (raw === '' || raw === '/') {
@@ -135,11 +170,16 @@ export function runCommand(input: string, context: CommandContext): CommandResul
     case 'help':
       return { kind: 'help' };
     case 'home':
-      return { kind: 'navigate', href: '/' };
+      return { kind: 'navigate', href: currentCourseOf(context)?.href ?? '/' };
+    case 'course':
+      return course(arg, context);
     case 'open':
       return open(arg, context.lectures);
     case 'search':
-      return { kind: 'navigate', href: arg ? `/hledat?q=${encodeURIComponent(arg)}` : '/hledat' };
+      return {
+        kind: 'navigate',
+        href: `${currentCourseOf(context)?.basePath ?? ''}${arg ? `/hledat?q=${encodeURIComponent(arg)}` : '/hledat'}`,
+      };
     case 'next':
       if (context.page !== 'part') return notInLecture(context);
       if (context.next) return { kind: 'navigate', href: context.next.href };
@@ -206,7 +246,7 @@ function open(arg: string, lectures: LectureTarget[]): CommandResult {
   const exact = lectures.find((lecture) => lecture.id === query);
   if (exact) return { kind: 'navigate', href: exact.href };
 
-  const matches = matchLectures(query, lectures);
+  const matches = matchByTitle(query, lectures);
   if (matches.length === 1) return { kind: 'navigate', href: matches[0]!.href };
   const shown = arg.length > 40 ? `${arg.slice(0, 40)}…` : arg;
   return matches.length > 1
@@ -214,11 +254,51 @@ function open(arg: string, lectures: LectureTarget[]): CommandResult {
     : { kind: 'message', text: `Žádná lekce neodpovídá výrazu „${shown}“.`, suggestions: all };
 }
 
-/** Lectures whose title or id contains every word of the folded query. */
-function matchLectures(query: string, lectures: LectureTarget[]): LectureTarget[] {
+/** `/course <number | id | words of the title>` */
+function course(arg: string, context: CommandContext): CommandResult {
+  const courses = context.courses ?? [];
+  if (courses.length < 2) {
+    return { kind: 'message', text: 'K dispozici je jen jeden kurz.', suggestions: [{ label: '/home', command: '/home' }] };
+  }
+  const current = currentCourseOf(context);
+  const all = courses.map((candidate) => courseSuggestion(candidate, current));
+  if (arg === '') {
+    return { kind: 'message', text: 'Napište číslo nebo název kurzu, například /course 1.', suggestions: all };
+  }
+
+  const query = fold(arg);
+  if (/^\d+$/.test(query)) {
+    const target = courses[Number(query) - 1];
+    if (!target) {
+      return {
+        kind: 'message',
+        text: `Kurz ${Number(query)} neexistuje. K dispozici jsou ${count(courses.length, 'kurz', 'kurzy', 'kurzů')}.`,
+        suggestions: all,
+      };
+    }
+    return { kind: 'navigate', href: target.href };
+  }
+
+  const exact = courses.find((candidate) => candidate.id === query);
+  if (exact) return { kind: 'navigate', href: exact.href };
+
+  const matches = matchByTitle(query, courses);
+  if (matches.length === 1) return { kind: 'navigate', href: matches[0]!.href };
+  const shown = arg.length > 40 ? `${arg.slice(0, 40)}…` : arg;
+  return matches.length > 1
+    ? {
+        kind: 'message',
+        text: `Výrazu „${shown}“ odpovídá více kurzů:`,
+        suggestions: matches.map((match) => courseSuggestion(match, current)),
+      }
+    : { kind: 'message', text: `Žádný kurz neodpovídá výrazu „${shown}“.`, suggestions: all };
+}
+
+/** Items whose title or id contains every word of the folded query. */
+function matchByTitle<T extends { id: string; title: string }>(query: string, items: T[]): T[] {
   const words = query.split(/\s+/).filter(Boolean);
-  return lectures.filter((lecture) => {
-    const haystack = fold(`${lecture.title} ${lecture.id}`);
+  return items.filter((item) => {
+    const haystack = fold(`${item.title} ${item.id}`);
     return words.every((word) => haystack.includes(word));
   });
 }
@@ -276,7 +356,10 @@ export function completions(input: string, context: CommandContext): Completion[
   const hasArgument = /\s/.test(text);
 
   if (hasArgument) {
-    return byWord(word)?.name === 'open' ? lectureCompletions(arg, context.lectures) : [];
+    const name = byWord(word)?.name;
+    if (name === 'open') return lectureCompletions(arg, context.lectures);
+    if (name === 'course') return courseCompletions(arg, context.courses ?? []);
+    return [];
   }
   return COMMANDS.filter(
     (command) => command.name.startsWith(word) || command.aliases.some((alias) => alias.startsWith(word)),
@@ -284,6 +367,22 @@ export function completions(input: string, context: CommandContext): Completion[
     value: command.examples ? `${commandLabel(command.name)} ` : commandLabel(command.name),
     label: commandLabel(command.name),
     description: command.description,
+  }));
+}
+
+function courseCompletions(arg: string, courses: CourseTarget[]): Completion[] {
+  const query = fold(arg);
+  const candidates = courses.filter(
+    (candidate) =>
+      query === '' ||
+      candidate.id.startsWith(query) ||
+      String(candidate.number) === query ||
+      matchByTitle(query, [candidate]).length > 0,
+  );
+  return candidates.map((candidate) => ({
+    value: `/course ${candidate.id}`,
+    label: `/course ${candidate.id}`,
+    description: candidate.title,
   }));
 }
 
@@ -302,7 +401,7 @@ function lectureCompletions(arg: string, lectures: LectureTarget[]): Completion[
   }
   const candidates = /^\d+$/.test(query)
     ? lectures.filter((lecture) => String(lecture.number).startsWith(query))
-    : matchLectures(query, lectures);
+    : matchByTitle(query, lectures);
   return candidates.map((lecture) => ({
     value: `/open ${lecture.number}`,
     label: `/open ${lecture.number}`,

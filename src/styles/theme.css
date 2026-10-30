@@ -388,18 +388,6 @@ main:focus {
   font-weight: var(--font-weight-bold);
 }
 
-.lecture-list .number,
-.tree .number {
-  display: inline-block;
-  min-width: 2ch;
-  color: var(--accent);
-  font-family: var(--font-family);
-}
-
-.lecture-list .number {
-  margin-right: 1ch;
-}
-
 .lecture-list .count {
   color: var(--foreground2);
   margin-left: 1ch;

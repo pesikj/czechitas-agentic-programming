@@ -36,8 +36,8 @@ The prepared content of a published revision (`src/server/content/snapshot-store
 
 | Table | Columns |
 |---|---|
-| `content_snapshots` | `revision_id` (primary key, references `content_revisions`), `model` (navigation model as JSON; the exercise map is rebuilt from the parts), `rendered` (sanitized HTML by `lectureId/partId`), `search` (search index), `created_at` |
-| `content_assets` | `(revision_id, path)` primary key, `content_type`, `width`, `height`, `data` (image bytes, `bytea`). Only images referenced by the content are stored. |
+| `content_snapshots` | `revision_id` (primary key, references `content_revisions`), `model` (navigation model of every course as JSON, `{ courses: [...] }`; the exercise maps are rebuilt from the parts, and a row in the older single-course format is rebuilt from its commit), `rendered` (sanitized HTML by `lectureId/partId`), `search` (search index), `created_at` |
+| `content_assets` | `(revision_id, path)` primary key, `content_type`, `width`, `height`, `data` (file bytes, `bytea`). Only images and linked files referenced by the content are stored. |
 
 ## `responses`
 
@@ -45,9 +45,10 @@ The **one current saved answer per learner and exercise**. Primary key: `(user_i
 
 | Column | Notes |
 |---|---|
+| `course_id` | The course of the exercise at save time (required; migration `0001` fills existing rows with `agent`) |
 | `exercise_id`, `exercise_revision` | Compared with the current exercise to flag answers to an earlier revision |
 | `content_revision_id` | The published revision the answer was saved against |
-| `lecture_id`, `part_id`, `lecture_title`, `part_title`, `exercise_title`, `field_labels` | Snapshots taken at save time, so answers stay listable and exportable after the exercise moves or is removed (titles added in migration `0001`) |
+| `lecture_id`, `part_id`, `lecture_title`, `part_title`, `exercise_title`, `field_labels` | Snapshots taken at save time, so answers stay listable and exportable after the exercise moves or is removed |
 | `fields` | `{ fieldId: markdown }` |
 | `saved_at` | Last successful save |
 

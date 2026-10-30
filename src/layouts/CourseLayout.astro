@@ -7,6 +7,7 @@ import CommandBar from '../components/CommandBar.astro';
 import ThemeToggle from '../components/ThemeToggle.astro';
 import BaseHead from '../components/BaseHead.astro';
 import UserMenu from '../components/UserMenu.astro';
+import { courseHref, searchHref } from '../lib/navigation';
 
 interface Props {
   title: string;
@@ -36,12 +37,12 @@ const pageTitle = title === courseTitle ? title : `${title} · ${courseTitle}`;
           </button>
         )
       }
-      <a class="brand" href="/">{courseTitle}</a>
+      <a class="brand" href={model ? courseHref(model) : '/'}>{courseTitle}</a>
       <Breadcrumb crumbs={crumbs} />
       <div class="topbar-tools">
         {
           Astro.locals.user && (
-            <form method="get" action="/hledat" role="search" class="header-search">
+            <form method="get" action={model ? searchHref(model) : '/hledat'} role="search" class="header-search">
               <label for="header-search" class="visually-hidden">Hledat v materiálech</label>
               <input id="header-search" name="q" type="search" placeholder="Hledat…" />
             </form>

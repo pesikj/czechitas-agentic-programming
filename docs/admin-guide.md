@@ -46,6 +46,8 @@ Stručný návod pro správu kurzu. Administraci najdete po přihlášení pod o
 2. **Administrace → Obsah → Aktualizovat obsah.** Web stáhne nejnovější verzi, zkontroluje ji a teprve pak ji zveřejní všem najednou.
 3. Když kontrola selže, zobrazí se seznam chyb se souborem a řádkem a studující dál vidí dosavadní verzi. Opravte chyby v repozitáři a aktualizaci spusťte znovu.
 
+Jedna aktualizace zveřejní **všechny kurzy** z repozitáře najednou (hlavní kurz i další kurzy v podadresářích, např. `data/`). Chyba v kterémkoli kurzu zastaví celou aktualizaci a zůstává předchozí verze všech kurzů. Chyby dalších kurzů poznáte podle cesty k souboru (`data/…`). Stránka **Obsah** ukazuje názvy zveřejněných kurzů.
+
 Obsah se nikdy neaktualizuje sám: ani podle času, ani při změně v repozitáři, ani návštěvou studujícího.
 
 ## Podpora studujících

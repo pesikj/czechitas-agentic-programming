@@ -1,7 +1,7 @@
 // Saved exercise responses: one current answer per learner and exercise (last save wins).
 // No drafts, history, grading or progress are stored.
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
-import type { ContentModel, Exercise } from '../lib/content/types';
+import type { Catalog, Exercise } from '../lib/content/types';
 import { getDb } from './db/client';
 import { responses, users } from './db/schema';
 
@@ -27,10 +27,11 @@ export async function countResponses(userId: string): Promise<number> {
   return row?.count ?? 0;
 }
 
-export async function listResponses(filter: { userId?: string; exerciseId?: string }): Promise<ResponseWithUser[]> {
+export async function listResponses(filter: { userId?: string; exerciseId?: string; courseId?: string }): Promise<ResponseWithUser[]> {
   const conditions = [
     filter.userId ? eq(responses.userId, filter.userId) : undefined,
     filter.exerciseId ? eq(responses.exerciseId, filter.exerciseId) : undefined,
+    filter.courseId ? eq(responses.courseId, filter.courseId) : undefined,
   ].filter((condition) => condition !== undefined);
   const rows = await getDb()
     .select({ response: responses, email: users.email })
@@ -66,11 +67,11 @@ export type SaveResult = { ok: true; savedAt: Date } | { ok: false; error: strin
 export async function saveResponse(input: {
   userId: string;
   exercise: Exercise;
-  model: ContentModel;
+  catalog: Catalog;
   contentRevisionId?: string;
   fields: Record<string, string>;
 }): Promise<SaveResult> {
-  const { exercise, model } = input;
+  const { exercise, catalog } = input;
   const fields: Record<string, string> = {};
   for (const field of exercise.fields) {
     const value = (input.fields[field.id] ?? '').replace(/\r\n/g, '\n');
@@ -83,9 +84,11 @@ export async function saveResponse(input: {
     return { ok: false, error: 'Odpověď je prázdná. Vyplňte alespoň jedno pole.' };
   }
 
-  const lecture = model.lectures.find((candidate) => candidate.id === exercise.lectureId);
+  const course = catalog.courses.find((candidate) => candidate.id === exercise.courseId);
+  const lecture = course?.lectures.find((candidate) => candidate.id === exercise.lectureId);
   const part = lecture?.parts.find((candidate) => candidate.id === exercise.partId);
   const values = {
+    courseId: exercise.courseId,
     exerciseRevision: exercise.revision,
     contentRevisionId: input.contentRevisionId ?? null,
     lectureId: exercise.lectureId,
@@ -105,11 +108,28 @@ export async function saveResponse(input: {
   return { ok: true, savedAt: saved!.savedAt };
 }
 
+/** Splits answers by course: catalog order first, unknown course ids last (titled by their id). */
+export function groupByCourse<T extends { courseId: string }>(
+  records: T[],
+  catalog: Catalog | undefined,
+): { courseId: string; title: string; records: T[] }[] {
+  const known = (catalog?.courses ?? []).map((course) => ({ courseId: course.id, title: course.title }));
+  const unknown = [...new Set(records.map((record) => record.courseId))]
+    .filter((courseId) => !known.some((course) => course.courseId === courseId))
+    .map((courseId) => ({ courseId, title: courseId }));
+  return [...known, ...unknown]
+    .map((course) => ({ ...course, records: records.filter((record) => record.courseId === course.courseId) }))
+    .filter((group) => group.records.length > 0);
+}
+
 export type RevisionNote = 'current' | 'older-revision' | 'removed';
 
 /** How a saved answer relates to the currently published exercise. */
-export function revisionNote(record: Pick<ResponseRecord, 'exerciseId' | 'exerciseRevision'>, model: ContentModel | undefined): RevisionNote {
-  const current = model?.exercises.get(record.exerciseId);
+export function revisionNote(
+  record: Pick<ResponseRecord, 'exerciseId' | 'exerciseRevision'>,
+  exercises: Map<string, Exercise> | undefined,
+): RevisionNote {
+  const current = exercises?.get(record.exerciseId);
   if (!current) return 'removed';
   return current.revision === record.exerciseRevision ? 'current' : 'older-revision';
 }

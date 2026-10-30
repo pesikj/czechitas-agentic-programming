@@ -7,7 +7,7 @@ import { safeNext, withNext } from '../server/auth/redirect';
 import { clientAddress, formField } from '../server/auth/request';
 import { sessionCookieName, sessionCookieOptions } from '../server/auth/sessions';
 import { getConfig } from '../server/config';
-import { getContent } from '../server/content/provider';
+import { getCourseContent } from '../server/content/provider';
 import { publicModel } from '../lib/content/visibility';
 import { lectureHref } from '../lib/navigation';
 
@@ -47,7 +47,7 @@ const notice = Astro.url.searchParams.has('odhlaseno')
     : undefined;
 const support = getConfig().SUPPORT_EMAIL;
 // Lectures readable without an account, e.g. tool installation before the course starts.
-const { model } = await getContent().catch(() => ({ model: undefined }));
+const { model } = await getCourseContent().catch(() => ({ model: undefined }));
 const publicLectures = model ? publicModel(model).lectures : [];
 ---
 

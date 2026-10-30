@@ -1,0 +1,5 @@
+id: zaklady
+title: Základy práce s agentem
+parts:
+  - 01-uvod.md
+  - 02-cviceni.md

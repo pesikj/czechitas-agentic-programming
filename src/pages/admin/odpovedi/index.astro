@@ -4,7 +4,7 @@ import AdminNav from '../../../components/AdminNav.astro';
 import AnswerCard from '../../../components/AnswerCard.astro';
 import Forbidden from '../../../components/Forbidden.astro';
 import { otherContext } from '../../../lib/navigation';
-import { getContent } from '../../../server/content/provider';
+import { getCourseContent } from '../../../server/content/provider';
 import { czechCount } from '../../../server/format';
 import { listResponses, responseFilterOptions } from '../../../server/responses';
 
@@ -13,14 +13,15 @@ if (!isAdmin) Astro.response.status = 403;
 
 const userId = Astro.url.searchParams.get('uzivatel') || undefined;
 const exerciseId = Astro.url.searchParams.get('cviceni') || undefined;
+const courseId = Astro.url.searchParams.get('kurz') || undefined;
 const isUuid = (value: string | undefined) => !value || /^[0-9a-f-]{36}$/i.test(value);
-const records = isAdmin && isUuid(userId) ? await listResponses({ ...(userId ? { userId } : {}), ...(exerciseId ? { exerciseId } : {}) }) : [];
+const records = isAdmin && isUuid(userId) ? await listResponses({ ...(userId ? { userId } : {}), ...(exerciseId ? { exerciseId } : {}), ...(courseId ? { courseId } : {}) }) : [];
 const options = isAdmin ? await responseFilterOptions() : { learners: [], exercises: [] };
-const { model } = await getContent();
-const exportQuery = new URLSearchParams({ ...(userId ? { uzivatel: userId } : {}), ...(exerciseId ? { cviceni: exerciseId } : {}) }).toString();
+const { model, catalog, courses } = await getCourseContent();
+const exportQuery = new URLSearchParams({ ...(userId ? { uzivatel: userId } : {}), ...(exerciseId ? { cviceni: exerciseId } : {}), ...(courseId ? { kurz: courseId } : {}) }).toString();
 ---
 
-<CourseLayout title="Odpovědi" courseTitle={model?.title} model={model} context={otherContext(model)}>
+<CourseLayout title="Odpovědi" courseTitle={model?.title} model={model} context={otherContext(model, courses)}>
   {
     isAdmin ? (
       <div class="admin-page">
@@ -29,6 +30,17 @@ const exportQuery = new URLSearchParams({ ...(userId ? { uzivatel: userId } : {}
         <p>Uložené odpovědi na nepovinná cvičení. Uložení neznamená, že byla odpověď přečtena nebo hodnocena.</p>
 
         <form method="get" class="filter-form" aria-label="Filtrovat odpovědi">
+          <div class="field">
+            <label for="kurz">Kurz</label>
+            <select id="kurz" name="kurz">
+              <option value="">Všechny kurzy</option>
+              {courses.map((course) => (
+                <option value={course.id} selected={course.id === courseId}>
+                  {course.title}
+                </option>
+              ))}
+            </select>
+          </div>
           <div class="field">
             <label for="uzivatel">Studující</label>
             <select id="uzivatel" name="uzivatel">
@@ -56,7 +68,7 @@ const exportQuery = new URLSearchParams({ ...(userId ? { uzivatel: userId } : {}
         </form>
 
         {records.length === 0 ? (
-          <p>{userId || exerciseId ? 'Filtru neodpovídá žádná uložená odpověď.' : 'Zatím nikdo neuložil žádnou odpověď.'}</p>
+          <p>{userId || exerciseId || courseId ? 'Filtru neodpovídá žádná uložená odpověď.' : 'Zatím nikdo neuložil žádnou odpověď.'}</p>
         ) : (
           <>
             <div class="page-actions">
@@ -66,7 +78,7 @@ const exportQuery = new URLSearchParams({ ...(userId ? { uzivatel: userId } : {}
               </a>
             </div>
             {records.map((record) => (
-              <AnswerCard record={record} model={model} learnerEmail={record.email} />
+              <AnswerCard record={record} catalog={catalog} learnerEmail={record.email} />
             ))}
           </>
         )}

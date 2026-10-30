@@ -45,7 +45,9 @@ After changing `src/middleware.ts`, restart `npm run dev`; the dev server does n
 src/lib/content/    content loader, validator, Markdown pipeline
 src/lib/            navigation and command registry (pure, shared with the browser)
 src/server/         configuration, database, accounts (auth/), content publishing (content/), responses
-src/pages/          Astro routes: learning pages, sign-in and password pages, /hledat, /moje-odpovedi, /admin/*
+src/pages/          Astro routes: learning pages, sign-in and password pages, /hledat, /moje-odpovedi, /admin/*;
+                    an additional course's pages under /<course>/ ([course]/), the main course at the root
+src/views/          learning page bodies (title page, lecture part, search) shared by both kinds of course route
 src/layouts/, src/components/, src/styles/, src/scripts/   learning interface
 fixtures/content/   test content (minimal, invalid cases, e2e)
 docs/               content contract, data model, decisions, operations, admin guide (Czech), pilot checklist

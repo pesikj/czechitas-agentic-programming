@@ -1,0 +1,9 @@
+---
+import SearchView from '../../views/SearchView.astro';
+import { getRoutedCourseContent } from '../../server/content/provider';
+
+const content = await getRoutedCourseContent(Astro.params.course);
+if (!content) return Astro.rewrite('/404');
+---
+
+<SearchView content={content} />
