@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { exportFileName, markdownDownload, responsesToMarkdown } from '../../../lib/export';
+import { exportCourseTitle, exportFileName, markdownDownload, responsesToMarkdown } from '../../../lib/export';
 import { findUserById } from '../../../server/auth/accounts';
 import { getCourseContent } from '../../../server/content/provider';
 import { groupByCourse, listResponses } from '../../../server/responses';
@@ -13,10 +13,13 @@ export const GET: APIRoute = async ({ locals, url }) => {
   if (userId && !/^[0-9a-f-]{36}$/i.test(userId)) return new Response('Neplatný účet', { status: 400 });
   const learner = userId ? await findUserById(userId) : undefined;
   const records = await listResponses({ ...(userId ? { userId } : {}), ...(exerciseId ? { exerciseId } : {}), ...(courseId ? { courseId } : {}) });
-  const { model, catalog } = await getCourseContent();
+  const { catalog } = await getCourseContent();
+  const groups = groupByCourse(records, catalog);
+  // A course filter names its course even if it has no answers.
+  const courseTitle = courseId ? (catalog?.courses.find((course) => course.id === courseId)?.title ?? courseId) : exportCourseTitle(groups);
 
   // Without a learner filter, each answer is labelled with its author.
-  const labelled = groupByCourse(records, catalog).flatMap((group) =>
+  const labelled = groups.flatMap((group) =>
     group.records.map((record) => ({
       ...record,
       courseTitle: group.title,
@@ -25,7 +28,7 @@ export const GET: APIRoute = async ({ locals, url }) => {
   );
   const markdown = responsesToMarkdown(labelled, {
     title: learner ? `Odpovědi – ${learner.email}` : 'Odpovědi studujících',
-    subtitle: [model?.title, exerciseId ? `cvičení ${exerciseId}` : undefined].filter(Boolean).join(' · '),
+    subtitle: [courseTitle, exerciseId ? `cvičení ${exerciseId}` : undefined].filter(Boolean).join(' · '),
   });
   return markdownDownload(markdown, exportFileName(learner ? `odpovedi-${learner.email}` : 'odpovedi'));
 };

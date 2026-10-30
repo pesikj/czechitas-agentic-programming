@@ -148,6 +148,8 @@ test.describe('exercise responses', () => {
     const markdown = await exported.text();
     expect(markdown).toContain('Odpověď datového kurzu');
     expect(markdown).not.toContain('Odpověď hlavního kurzu');
+    expect(markdown).toMatch(/^Digitální akademie: Data$/m);
+    expect(markdown).not.toContain('Agentní programování s Codex CLI a Claude Code');
   });
 
   test('saving needs a session', async ({ browser }) => {

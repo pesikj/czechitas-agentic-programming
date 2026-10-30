@@ -34,6 +34,8 @@ Railway provides HTTPS and the reverse proxy. Course content comes from the cont
 
 Push to the deployed branch; Railway rebuilds and redeploys the app. Migrations run automatically when the app starts. Sessions survive the update because they are stored in the database. Content stays at the published revision. Website updates never fetch or publish new content.
 
+During the release that adds the second course (answers gain a `course_id` column and snapshots a new format), do not keep the old instance serving after the migration has run. Until it is stopped, saving an answer on it fails (the new column is required) and it may cold-load a snapshot in the new format. Expect a brief window in which answer saves can fail.
+
 ## Backups
 
 The database holds accounts, saved responses, the publishing history and the published content (including images), so one archive restores everything.

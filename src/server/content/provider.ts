@@ -169,7 +169,11 @@ async function currentSnapshot(): Promise<Snapshot | undefined> {
     const published = { id: revision.id, sha: revision.commitSha };
     loading = { revisionId: revision.id, snapshot: loadSnapshot(published).then((stored) => stored ?? rebuildSnapshot(published)) };
   }
-  const snapshot = await loading.snapshot;
+  const snapshot = await loading.snapshot.catch((error: unknown) => {
+    // Forget the failure so the next request retries the rebuild.
+    if (loading?.revisionId === revision.id) loading = undefined;
+    throw error;
+  });
   if (loading?.revisionId === revision.id) loading = undefined;
   active = snapshot;
   return snapshot;
@@ -258,6 +262,8 @@ export async function getCourseContent(courseId?: string): Promise<CourseContent
  */
 export async function getRoutedCourseContent(courseId: string | undefined): Promise<CourseContent | undefined> {
   const content = await getCourseContent(courseId ?? '');
+  // Without a catalog (nothing published yet, or invalid content) no additional course is known.
+  if (!content.catalog) return undefined;
   const isMain = content.model !== undefined && content.model === content.catalog?.courses[0];
   return content.state === 'ready' && (!content.model || isMain) ? undefined : content;
 }

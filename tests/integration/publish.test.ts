@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { getDb } from '../../src/server/db/client';
 import { contentAssets, contentSnapshots } from '../../src/server/db/schema';
-import { activateSnapshot, getContent, getCourseContent, getRenderedPart, resolveAsset, searchContent } from '../../src/server/content/provider';
+import { activateSnapshot, getContent, getCourseContent, getRenderedPart, getRoutedCourseContent, resolveAsset, searchContent } from '../../src/server/content/provider';
 import { getActiveRevision, publishContent } from '../../src/server/content/publish';
 import { CHECKOUT_PREFIX, repositorySettings } from '../../src/server/content/repository';
 import { TEST_CONTENT_REPO } from '../../vitest.config';
@@ -30,6 +30,9 @@ describe('content publishing', () => {
   it('starts empty, then publishes the branch only when an admin runs the update', async () => {
     const checkoutsBefore = leftoverCheckouts();
     expect((await getContent()).state).toBe('empty');
+    // Before the first publish no additional course is known, so no first segment is a course.
+    expect(await getRoutedCourseContent('neexistuje')).toBeUndefined();
+    expect(await getRoutedCourseContent('data')).toBeUndefined();
 
     const first = await publishContent(null);
     expect(first.status).toBe('activated');
@@ -122,6 +125,23 @@ describe('content publishing', () => {
     expect(content.model?.title).toBe('Upravený kurz');
     expect(await storedRevisions()).toEqual([active.id]);
     expect(await storedAssets(active.id)).toEqual(ASSETS);
+  });
+
+  it('retries a failed rebuild on the next request', async () => {
+    const active = (await getActiveRevision())!;
+    await getDb().delete(contentSnapshots);
+    forgetSnapshot();
+
+    // The commit cannot be checked out while the repository is away.
+    renameSync(TEST_CONTENT_REPO, `${TEST_CONTENT_REPO}.away`);
+    try {
+      await expect(getContent()).rejects.toThrow();
+    } finally {
+      renameSync(`${TEST_CONTENT_REPO}.away`, TEST_CONTENT_REPO);
+    }
+
+    expect((await getContent()).state).toBe('ready');
+    expect(await storedRevisions()).toEqual([active.id]);
   });
 
   it('publishes every course of the repository in one revision', async () => {

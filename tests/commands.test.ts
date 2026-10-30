@@ -124,6 +124,10 @@ describe('runCommand', () => {
 });
 
 describe('/search', () => {
+  it('is described as searching the current course only', () => {
+    expect(findCommand('search')?.description).toBe('Hledat v materiálech tohoto kurzu');
+  });
+
   it('opens search results, also via the Czech alias', () => {
     expect(navigateTo('/search prompt pro agenta')).toBe('/hledat?q=prompt%20pro%20agenta');
     expect(navigateTo('/hledat', middle)).toBe('/hledat');

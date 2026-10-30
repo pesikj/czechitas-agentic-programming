@@ -88,7 +88,7 @@ export const COMMANDS: readonly CommandDefinition[] = [
   {
     name: 'search',
     aliases: ['hledat'],
-    description: 'Hledat ve všech materiálech',
+    description: 'Hledat v materiálech tohoto kurzu',
     examples: ['/search prompt'],
   },
   {

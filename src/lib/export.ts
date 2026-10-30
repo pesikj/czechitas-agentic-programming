@@ -62,3 +62,8 @@ export function markdownDownload(markdown: string, fileName: string): Response {
     },
   });
 }
+
+/** The course named in an export's subtitle: that of a single group; none for several (the `##` headings name them). */
+export function exportCourseTitle(groups: { title: string }[]): string | undefined {
+  return groups.length === 1 ? groups[0]!.title : undefined;
+}

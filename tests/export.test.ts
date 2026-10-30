@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { exportFileName, responsesToMarkdown } from '../src/lib/export';
+import { exportCourseTitle, exportFileName, responsesToMarkdown } from '../src/lib/export';
 
 describe('Markdown export', () => {
   it('keeps answers verbatim with exercise and field labels', () => {
@@ -48,6 +48,12 @@ describe('Markdown export', () => {
     expect(single).not.toContain('## A');
     expect(single).toContain('## prvni\n');
     expect(single).toContain('### Pole\n');
+  });
+
+  it('names the course in a subtitle only when there is exactly one', () => {
+    expect(exportCourseTitle([{ title: 'Data' }])).toBe('Data');
+    expect(exportCourseTitle([{ title: 'Agent' }, { title: 'Data' }])).toBeUndefined();
+    expect(exportCourseTitle([])).toBeUndefined();
   });
 
   it('builds safe file names', () => {
