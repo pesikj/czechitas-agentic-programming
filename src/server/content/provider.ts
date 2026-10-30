@@ -1,17 +1,20 @@
 // Supplies the content shown to learners: the administrator-published revision (stored in the
 // database), or, in the optional preview mode (CONTENT_DIR), a directory read directly. Each
-// snapshot holds the navigation model, rendered pages, images and search index of one revision.
+// snapshot holds the navigation model, rendered pages, images and search index of one revision,
+// for every course of the repository.
 import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { imageSize } from 'image-size';
 import { loadContent, renderMarkdown, type ImageResolution, type LinkResolution } from '../../lib/content/index';
-import type { LoadResult, Part } from '../../lib/content/types';
+import type { CourseTarget } from '../../lib/commands';
+import type { Catalog, ContentModel, LoadResult, Part, ValidationIssue } from '../../lib/content/types';
+import { courseTargets } from '../../lib/navigation';
 import { buildSearchIndex, search as searchIndex, type SearchDocument, type SearchHit } from '../../lib/search';
 import { getConfig } from '../config';
 import { getDb } from '../db/client';
 import { checkoutRevision, repositorySettings } from './repository';
 import { getActiveRevision } from './revisions';
-import { loadSnapshot, readAsset, saveSnapshot } from './snapshot-store';
+import { deleteSnapshot, loadSnapshot, readAsset, saveSnapshot } from './snapshot-store';
 
 const ASSET_ROUTE = '/obsah/';
 
@@ -69,8 +72,9 @@ export interface Snapshot {
   result: LoadResult;
   /** Existing, servable images and linked files by repository-relative path. */
   assets: Map<string, SnapshotAsset>;
-  /** Sanitized HTML by `lectureId/partId`. */
+  /** Sanitized HTML by `lectureId/partId` (lecture ids are unique across the courses). */
   rendered: Map<string, string>;
+  /** The search documents of every course. */
   search: SearchDocument[];
 }
 
@@ -92,23 +96,22 @@ export async function buildSnapshot(dir: string, revision?: Snapshot['revision']
   const result = await loadContent(dir);
   const assets: Snapshot['assets'] = new Map();
   const rendered = new Map<string, string>();
-  const model = result.model;
-  if (model) {
-    for (const lecture of model.lectures) {
-      for (const part of lecture.parts) {
-        for (const asset of part.assets) {
-          const contentType = contentTypeOf(asset.path);
-          if (!asset.exists || !contentType || assets.has(asset.path)) continue;
-          const dimensions = contentType.startsWith('image/') ? await dimensionsOf(path.join(dir, asset.path)) : {};
-          assets.set(asset.path, { path: asset.path, contentType, ...dimensions });
-        }
+  const lectures = result.model?.courses.flatMap((course) => course.lectures) ?? [];
+  for (const lecture of lectures) {
+    for (const part of lecture.parts) {
+      for (const asset of part.assets) {
+        const contentType = contentTypeOf(asset.path);
+        if (!asset.exists || !contentType || assets.has(asset.path)) continue;
+        const dimensions = contentType.startsWith('image/') ? await dimensionsOf(path.join(dir, asset.path)) : {};
+        assets.set(asset.path, { path: asset.path, contentType, ...dimensions });
       }
     }
-    for (const lecture of model.lectures) {
-      for (const part of lecture.parts) rendered.set(key(part), await render(part, assets));
-    }
   }
-  return { ...(revision ? { revision } : {}), dir, result, assets, rendered, search: model ? buildSearchIndex(model) : [] };
+  for (const lecture of lectures) {
+    for (const part of lecture.parts) rendered.set(key(part), await render(part, assets));
+  }
+  const search = result.model?.courses.flatMap((course) => buildSearchIndex(course)) ?? [];
+  return { ...(revision ? { revision } : {}), dir, result, assets, rendered, search };
 }
 
 /** Switches learners to a prepared snapshot (after the database marks it active). */
@@ -174,14 +177,19 @@ async function currentSnapshot(): Promise<Snapshot | undefined> {
 
 /**
  * Rebuilds a published revision whose snapshot is missing (published before snapshots were
- * stored, or removed by hand) from its commit, and stores it again.
+ * stored, or removed by hand) or stored in an old format, from its commit, and stores it again.
  */
 async function rebuildSnapshot(revision: { id: string; sha: string }): Promise<Snapshot> {
   const checkout = await checkoutRevision(repositorySettings(), revision.sha);
   try {
     const snapshot = await buildSnapshot(checkout.dir, revision);
     if (snapshot.result.model) {
-      await saveSnapshot(getDb(), revision.id, snapshot).catch((error: unknown) => {
+      // A row in an old format is replaced (its assets cascade) in the same transaction.
+      const replace = getDb().transaction(async (tx) => {
+        await deleteSnapshot(tx, revision.id);
+        await saveSnapshot(tx, revision.id, snapshot);
+      });
+      await replace.catch((error: unknown) => {
         // Another server process stored it first.
         if ((error as { code?: string }).code !== '23505') throw error;
       });
@@ -211,7 +219,10 @@ async function fingerprintOf(dir: string): Promise<string> {
   return parts.join('|');
 }
 
-/** The content learners currently see. `empty` means nothing has been published yet. */
+/**
+ * The content learners currently see, with every course. `empty` means nothing has been
+ * published yet.
+ */
 export async function getContent(): Promise<ContentState> {
   const snapshot = await currentSnapshot();
   if (!snapshot) return { state: 'empty', issues: [] };
@@ -222,15 +233,35 @@ export async function getContent(): Promise<ContentState> {
   };
 }
 
+export interface CourseContent {
+  state: ContentState['state'];
+  issues: ValidationIssue[];
+  revision?: { id: string; sha: string };
+  catalog?: Catalog;
+  /** The requested course; undefined if the content is empty/invalid or the id is unknown. */
+  model?: ContentModel;
+  courses: CourseTarget[];
+}
+
+/** One course of the current content; the main course when `courseId` is omitted. */
+export async function getCourseContent(courseId?: string): Promise<CourseContent> {
+  const { state, issues, revision, model: catalog } = await getContent();
+  if (!catalog) return { state, issues, ...(revision ? { revision } : {}), courses: [] };
+  const id = courseId ?? catalog.courses[0]!.id;
+  const model = catalog.courses.find((course) => course.id === id);
+  return { state, issues, ...(revision ? { revision } : {}), catalog, ...(model ? { model } : {}), courses: courseTargets(catalog) };
+}
+
 /** Sanitized HTML of a part, with image URLs pointing at the protected asset route. */
 export async function getRenderedPart(part: Part): Promise<string> {
   const snapshot = await currentSnapshot();
   return snapshot?.rendered.get(key(part)) ?? '';
 }
 
-export async function searchContent(query: string): Promise<SearchHit[]> {
+/** Search within one course. */
+export async function searchContent(query: string, courseId: string): Promise<SearchHit[]> {
   const snapshot = await currentSnapshot();
-  return snapshot ? searchIndex(snapshot.search, query) : [];
+  return snapshot ? searchIndex(snapshot.search.filter((document) => document.courseId === courseId), query) : [];
 }
 
 /**

@@ -12,10 +12,10 @@ import {
   partFileName,
 } from '../../../lib/navigation';
 import { visibleModel } from '../../../lib/content/visibility';
-import { getContent, getRenderedPart } from '../../../server/content/provider';
+import { getCourseContent, getRenderedPart } from '../../../server/content/provider';
 import { getResponse } from '../../../server/responses';
 
-const content = await getContent();
+const content = await getCourseContent();
 const { issues } = content;
 const user = Astro.locals.user;
 // Signed-out visitors (on a public lecture) see only the public lectures.
@@ -25,7 +25,7 @@ if (model && !lecture) return Astro.rewrite('/404');
 const part = lecture && findPart(lecture, Astro.params.partId ?? '');
 if (!model || !part) Astro.response.status = model || content.state === 'empty' ? 404 : 500;
 
-const context = model && lecture && part ? partContext(model, lecture, part) : otherContext(model);
+const context = model && lecture && part ? partContext(model, lecture, part, content.courses) : otherContext(model, content.courses);
 const html = part ? await getRenderedPart(part) : '';
 // The renderer leaves a placeholder where each exercise panel belongs.
 const segments = html.split(/<div class="exercise" data-exercise-id="([^"]*)"><\/div>/);

@@ -37,7 +37,7 @@ const lectures = new Map(model.lectures.map((lecture) => [lecture.id, lecture]))
               {lecture.parts.map((part) => (
                 <li>
                   <a
-                    href={partHref(lecture.id, part.id)}
+                    href={partHref(lecture, part.id)}
                     aria-current={isCurrent && current?.partId === part.id ? 'page' : undefined}
                   >
                     <span class="file">{partFileName(part)}</span>

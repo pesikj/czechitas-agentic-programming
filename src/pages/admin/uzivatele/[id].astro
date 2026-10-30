@@ -17,7 +17,7 @@ import {
 import { formField } from '../../../server/auth/request';
 import { accountStatusLabel, invitationStatusLabel, roleLabel } from '../../../server/admin-labels';
 import { otherContext } from '../../../lib/navigation';
-import { getContent } from '../../../server/content/provider';
+import { getCourseContent } from '../../../server/content/provider';
 import { formatDateTime } from '../../../server/format';
 import { countResponses } from '../../../server/responses';
 
@@ -56,10 +56,10 @@ const user = isAdmin ? await findUserById(Astro.params.id ?? '').catch(() => und
 if (isAdmin && !user) Astro.response.status = 404;
 const responseCount = user ? await countResponses(user.id) : 0;
 const isSelf = user?.id === admin?.id;
-const { model } = await getContent();
+const { model, courses } = await getCourseContent();
 ---
 
-<CourseLayout title={user?.email ?? 'Účet'} courseTitle={model?.title} model={model} context={otherContext(model)}>
+<CourseLayout title={user?.email ?? 'Účet'} courseTitle={model?.title} model={model} context={otherContext(model, courses)}>
   {
     !isAdmin ? (
       <Forbidden />

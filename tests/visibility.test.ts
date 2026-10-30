@@ -3,7 +3,8 @@ import { loadContent } from '../src/lib/content';
 import { isPublicContentPath, publicModel, visibleModel } from '../src/lib/content/visibility';
 
 // The e2e fixture marks only the "shrnuti" lecture as public.
-const { model } = await loadContent('fixtures/content/e2e');
+const { model: catalog } = await loadContent('fixtures/content/e2e');
+const model = catalog?.courses[0];
 
 describe('public lectures', () => {
   it('reads `public` from lecture.yaml, defaulting to false', () => {
@@ -33,7 +34,7 @@ describe('public lectures', () => {
       '/hledat',
       '/',
     ];
-    for (const path of allowed) expect(isPublicContentPath(model!, path), path).toBe(true);
-    for (const path of denied) expect(isPublicContentPath(model!, path), path).toBe(false);
+    for (const path of allowed) expect(isPublicContentPath(catalog!, path), path).toBe(true);
+    for (const path of denied) expect(isPublicContentPath(catalog!, path), path).toBe(false);
   });
 });

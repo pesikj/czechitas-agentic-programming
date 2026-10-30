@@ -22,9 +22,11 @@ export const POST: APIRoute = async ({ params, request, locals, redirect }) => {
       ? new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } })
       : redirect(`${back}${back.includes('?') ? '&' : '?'}${body.ok ? 'ulozeno' : 'chyba'}=${encodeURIComponent(params.exerciseId ?? '')}${anchor}`, 303);
 
+  // Exercise ids are unique across the courses, so any course's exercise can be saved here.
   const content = await getContent();
-  const exercise = content.model?.exercises.get(params.exerciseId ?? '');
-  if (!content.model || !exercise) {
+  const catalog = content.model;
+  const exercise = catalog?.exercises.get(params.exerciseId ?? '');
+  if (!catalog || !exercise) {
     return reply(404, { ok: false, message: 'Toto cvičení už v aktuálních materiálech není. Odpověď nelze uložit.' });
   }
 
@@ -35,7 +37,7 @@ export const POST: APIRoute = async ({ params, request, locals, redirect }) => {
   const result = await saveResponse({
     userId: user.id,
     exercise,
-    model: content.model,
+    catalog,
     ...(content.revision ? { contentRevisionId: content.revision.id } : {}),
     fields,
   });

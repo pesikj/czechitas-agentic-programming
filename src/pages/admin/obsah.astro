@@ -4,7 +4,7 @@ import AdminNav from '../../components/AdminNav.astro';
 import Forbidden from '../../components/Forbidden.astro';
 import { otherContext } from '../../lib/navigation';
 import { getConfig } from '../../server/config';
-import { getContent } from '../../server/content/provider';
+import { getCourseContent } from '../../server/content/provider';
 import { getActiveRevision, listRevisionRuns, publishContent, type PublishResult } from '../../server/content/publish';
 import { displayRepositoryUrl } from '../../server/content/repository';
 import { czechCount, formatDateTime, shortSha } from '../../server/format';
@@ -27,7 +27,7 @@ const runs = isAdmin ? await listRevisionRuns(10) : [];
 const inProgress = runs.find((run) => run.status === 'pending' || run.status === 'validating');
 const lastFailed = runs[0]?.status === 'failed' ? runs[0] : undefined;
 const shownIssues = result && result.status !== 'busy' ? result.revision.issues : lastFailed ? lastFailed.issues : (active?.issues ?? []);
-const content = await getContent();
+const content = await getCourseContent();
 const statusLabel: Record<string, string> = {
   pending: 'čeká',
   validating: 'probíhá kontrola',
@@ -38,7 +38,7 @@ const statusLabel: Record<string, string> = {
 };
 ---
 
-<CourseLayout title="Obsah" courseTitle={content.model?.title} model={content.model} context={otherContext(content.model)}>
+<CourseLayout title="Obsah" courseTitle={content.model?.title} model={content.model} context={otherContext(content.model, content.courses)}>
   {
     isAdmin ? (
       <div class="admin-page">
@@ -78,6 +78,8 @@ const statusLabel: Record<string, string> = {
           <dd>
             <code>{displayRepositoryUrl(config.CONTENT_REPO_URL)}</code>, větev <code>{config.CONTENT_BRANCH}</code>
           </dd>
+          <dt>Kurzy</dt>
+          <dd>{content.catalog ? content.catalog.courses.map((course) => course.title).join(', ') : 'zatím žádné'}</dd>
           <dt>Zveřejněná revize</dt>
           <dd>{active ? <code>{shortSha(active.commitSha)}</code> : 'zatím žádná'}</dd>
           <dt>Poslední úspěšná aktualizace</dt>

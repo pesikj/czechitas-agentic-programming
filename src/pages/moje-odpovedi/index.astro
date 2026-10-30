@@ -2,16 +2,16 @@
 import CourseLayout from '../../layouts/CourseLayout.astro';
 import AnswerCard from '../../components/AnswerCard.astro';
 import { otherContext } from '../../lib/navigation';
-import { getContent } from '../../server/content/provider';
+import { getCourseContent } from '../../server/content/provider';
 import { czechCount } from '../../server/format';
 import { listResponses } from '../../server/responses';
 
 const user = Astro.locals.user!;
 const records = await listResponses({ userId: user.id });
-const { model } = await getContent();
+const { model, catalog, courses } = await getCourseContent();
 ---
 
-<CourseLayout title="Moje odpovědi" courseTitle={model?.title} model={model} context={otherContext(model)} crumbs={[{ label: 'moje-odpovedi' }]}>
+<CourseLayout title="Moje odpovědi" courseTitle={model?.title} model={model} context={otherContext(model, courses)} crumbs={[{ label: 'moje-odpovedi' }]}>
   <div class="admin-page">
     <h1>Moje odpovědi</h1>
     <p>Uložené odpovědi na cvičení. Vidí je i administrátoři kurzu. Upravit je můžete přímo u cvičení.</p>
@@ -27,7 +27,7 @@ const { model } = await getContent();
           </div>
           {records.map((record) => (
             <>
-              <AnswerCard record={record} model={model} />
+              <AnswerCard record={record} catalog={catalog} />
               <p class="page-actions">
                 <a href={`/moje-odpovedi/export.md?cviceni=${encodeURIComponent(record.exerciseId)}`} download>
                   Stáhnout tuto odpověď

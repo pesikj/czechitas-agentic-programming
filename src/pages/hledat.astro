@@ -1,15 +1,15 @@
 ---
 import CourseLayout from '../layouts/CourseLayout.astro';
 import { otherContext } from '../lib/navigation';
-import { getContent, searchContent } from '../server/content/provider';
+import { getCourseContent, searchContent } from '../server/content/provider';
 import { czechCount } from '../server/format';
 
 const query = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, 200);
-const hits = query ? await searchContent(query) : [];
-const { model } = await getContent();
+const { model, courses } = await getCourseContent();
+const hits = query && model ? await searchContent(query, model.id) : [];
 ---
 
-<CourseLayout title={query ? `Hledání: ${query}` : 'Hledání'} courseTitle={model?.title} model={model} context={otherContext(model)} crumbs={[{ label: 'hledat' }]}>
+<CourseLayout title={query ? `Hledání: ${query}` : 'Hledání'} courseTitle={model?.title} model={model} context={otherContext(model, courses)} crumbs={[{ label: 'hledat' }]}>
   <div class="search-page">
     <h1>Hledání v materiálech</h1>
     <form method="get" role="search" class="search-form">

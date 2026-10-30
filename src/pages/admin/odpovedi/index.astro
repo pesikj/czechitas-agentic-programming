@@ -4,7 +4,7 @@ import AdminNav from '../../../components/AdminNav.astro';
 import AnswerCard from '../../../components/AnswerCard.astro';
 import Forbidden from '../../../components/Forbidden.astro';
 import { otherContext } from '../../../lib/navigation';
-import { getContent } from '../../../server/content/provider';
+import { getCourseContent } from '../../../server/content/provider';
 import { czechCount } from '../../../server/format';
 import { listResponses, responseFilterOptions } from '../../../server/responses';
 
@@ -16,11 +16,11 @@ const exerciseId = Astro.url.searchParams.get('cviceni') || undefined;
 const isUuid = (value: string | undefined) => !value || /^[0-9a-f-]{36}$/i.test(value);
 const records = isAdmin && isUuid(userId) ? await listResponses({ ...(userId ? { userId } : {}), ...(exerciseId ? { exerciseId } : {}) }) : [];
 const options = isAdmin ? await responseFilterOptions() : { learners: [], exercises: [] };
-const { model } = await getContent();
+const { model, catalog, courses } = await getCourseContent();
 const exportQuery = new URLSearchParams({ ...(userId ? { uzivatel: userId } : {}), ...(exerciseId ? { cviceni: exerciseId } : {}) }).toString();
 ---
 
-<CourseLayout title="Odpovědi" courseTitle={model?.title} model={model} context={otherContext(model)}>
+<CourseLayout title="Odpovědi" courseTitle={model?.title} model={model} context={otherContext(model, courses)}>
   {
     isAdmin ? (
       <div class="admin-page">
@@ -66,7 +66,7 @@ const exportQuery = new URLSearchParams({ ...(userId ? { uzivatel: userId } : {}
               </a>
             </div>
             {records.map((record) => (
-              <AnswerCard record={record} model={model} learnerEmail={record.email} />
+              <AnswerCard record={record} catalog={catalog} learnerEmail={record.email} />
             ))}
           </>
         )}

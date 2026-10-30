@@ -1,8 +1,8 @@
 // What signed-out visitors may see: lectures marked `public: true` in lecture.yaml and the
 // images and files they reference. Everything else requires sign-in.
-import type { ContentModel, Exercise, TocNode } from './types';
+import type { Catalog, ContentModel, Exercise, TocNode } from './types';
 
-/** The model reduced to public lectures, so visitors never see other lecture titles. */
+/** The course reduced to public lectures, so visitors never see other lecture titles. */
 export function publicModel(model: ContentModel): ContentModel {
   const lectures = model.lectures.filter((lecture) => lecture.public);
   const ids = new Set(lectures.map((lecture) => lecture.id));
@@ -27,7 +27,9 @@ function filterToc(nodes: TocNode[], ids: Set<string>): TocNode[] {
  * Whether a URL path (as requested, percent-encoded) is a public lecture page
  * (`/lekce/<lecture>[/<part>]`) or an image or file used by a public lecture (`/obsah/<path>`).
  */
-export function isPublicContentPath(model: ContentModel, pathname: string): boolean {
+export function isPublicContentPath(catalog: Catalog, pathname: string): boolean {
+  // Only the main course has routes so far.
+  const model = catalog.courses[0]!;
   const segments = decodeSegments(pathname);
   if (!segments) return false;
   const [route, ...rest] = segments;

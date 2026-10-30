@@ -1,7 +1,7 @@
 // Saved exercise responses: one current answer per learner and exercise (last save wins).
 // No drafts, history, grading or progress are stored.
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
-import type { ContentModel, Exercise } from '../lib/content/types';
+import type { Catalog, Exercise } from '../lib/content/types';
 import { getDb } from './db/client';
 import { responses, users } from './db/schema';
 
@@ -66,11 +66,11 @@ export type SaveResult = { ok: true; savedAt: Date } | { ok: false; error: strin
 export async function saveResponse(input: {
   userId: string;
   exercise: Exercise;
-  model: ContentModel;
+  catalog: Catalog;
   contentRevisionId?: string;
   fields: Record<string, string>;
 }): Promise<SaveResult> {
-  const { exercise, model } = input;
+  const { exercise, catalog } = input;
   const fields: Record<string, string> = {};
   for (const field of exercise.fields) {
     const value = (input.fields[field.id] ?? '').replace(/\r\n/g, '\n');
@@ -83,7 +83,8 @@ export async function saveResponse(input: {
     return { ok: false, error: 'Odpověď je prázdná. Vyplňte alespoň jedno pole.' };
   }
 
-  const lecture = model.lectures.find((candidate) => candidate.id === exercise.lectureId);
+  const course = catalog.courses.find((candidate) => candidate.id === exercise.courseId);
+  const lecture = course?.lectures.find((candidate) => candidate.id === exercise.lectureId);
   const part = lecture?.parts.find((candidate) => candidate.id === exercise.partId);
   const values = {
     exerciseRevision: exercise.revision,
@@ -108,8 +109,11 @@ export async function saveResponse(input: {
 export type RevisionNote = 'current' | 'older-revision' | 'removed';
 
 /** How a saved answer relates to the currently published exercise. */
-export function revisionNote(record: Pick<ResponseRecord, 'exerciseId' | 'exerciseRevision'>, model: ContentModel | undefined): RevisionNote {
-  const current = model?.exercises.get(record.exerciseId);
+export function revisionNote(
+  record: Pick<ResponseRecord, 'exerciseId' | 'exerciseRevision'>,
+  exercises: Map<string, Exercise> | undefined,
+): RevisionNote {
+  const current = exercises?.get(record.exerciseId);
   if (!current) return 'removed';
   return current.revision === record.exerciseRevision ? 'current' : 'older-revision';
 }

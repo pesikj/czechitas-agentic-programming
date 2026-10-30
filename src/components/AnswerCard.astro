@@ -1,22 +1,25 @@
 ---
 // One saved answer, rendered with the same (sanitized) Markdown dialect as course content.
 import { renderMarkdown } from '../lib/content/index';
-import type { ContentModel } from '../lib/content/types';
+import type { Catalog } from '../lib/content/types';
 import { partHref } from '../lib/navigation';
 import { formatDateTime } from '../server/format';
 import { revisionNote, type ResponseRecord } from '../server/responses';
 
 interface Props {
   record: ResponseRecord;
-  model: ContentModel | undefined;
+  catalog: Catalog | undefined;
   learnerEmail?: string;
   headingLevel?: 2 | 3;
 }
 
-const { record, model, learnerEmail, headingLevel = 2 } = Astro.props;
-const note = revisionNote(record, model);
-const exercise = model?.exercises.get(record.exerciseId);
-const href = exercise ? `${partHref(exercise.lectureId, exercise.partId)}#cviceni-${encodeURIComponent(exercise.id)}` : undefined;
+const { record, catalog, learnerEmail, headingLevel = 2 } = Astro.props;
+const note = revisionNote(record, catalog?.exercises);
+const exercise = catalog?.exercises.get(record.exerciseId);
+const lecture = exercise && catalog?.courses
+  .find((course) => course.id === exercise.courseId)
+  ?.lectures.find((candidate) => candidate.id === exercise.lectureId);
+const href = exercise && lecture ? `${partHref(lecture, exercise.partId)}#cviceni-${encodeURIComponent(exercise.id)}` : undefined;
 const location = [record.lectureTitle, record.partTitle].filter(Boolean).join(' › ');
 const name = record.exerciseTitle ?? record.exerciseId;
 const Heading = headingLevel === 2 ? 'h2' : 'h3';

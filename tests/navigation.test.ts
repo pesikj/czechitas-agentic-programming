@@ -1,7 +1,9 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadContent } from '../src/lib/content/index';
+import { loadContent, type ContentModel } from '../src/lib/content/index';
 import {
+  courseHref,
+  courseTargets,
   findLecture,
   findPart,
   homeContext,
@@ -11,17 +13,20 @@ import {
   partContext,
   partFileName,
   partHref,
+  searchHref,
 } from '../src/lib/navigation';
 
-const { model } = await loadContent(path.resolve('fixtures/content/minimal'));
-if (!model) throw new Error('minimal fixture must load');
+const { model: catalog } = await loadContent(path.resolve('fixtures/content/courses'));
+if (!catalog) throw new Error('courses fixture must load');
+const [model, dataCourse] = catalog.courses as [ContentModel, ContentModel];
 
 const lecture = (id: string) => findLecture(model, id)!;
 const part = (lectureId: string, partId: string) => findPart(lecture(lectureId), partId)!;
 
 describe('navigation', () => {
   it('builds stable part links', () => {
-    expect(partHref('zaklady', 'uvod')).toBe('/lekce/zaklady/uvod');
+    expect(partHref({ id: 'zaklady', basePath: '' }, 'uvod')).toBe('/lekce/zaklady/uvod');
+    expect(partHref({ id: 'tabulky', basePath: '/data' }, 'uvod')).toBe('/data/lekce/tabulky/uvod');
     expect(lectureHref(lecture('zaklady'))).toBe('/lekce/zaklady/uvod');
     expect(partFileName(part('zaklady', 'prvni-cviceni'))).toBe('02-prvni-cviceni');
   });
@@ -64,10 +69,12 @@ describe('navigation', () => {
   });
 
   it('builds command contexts', () => {
-    expect(homeContext(model)).toEqual({ page: 'home', lectures: lectureTargets(model) });
+    expect(homeContext(model)).toEqual({ page: 'home', lectures: lectureTargets(model), courses: [], currentCourse: 'agent' });
     expect(partContext(model, lecture('zaklady'), part('zaklady', 'prvni-cviceni'))).toEqual({
       page: 'part',
       lectures: lectureTargets(model),
+      courses: [],
+      currentCourse: 'agent',
       lectureNumber: 1,
       previous: { title: 'Úvod', href: '/lekce/zaklady/uvod' },
       nextLecture: lectureTargets(model)[1],
@@ -77,6 +84,40 @@ describe('navigation', () => {
       2,
       'zaklady',
       'zaver',
+    ]);
+  });
+
+  it('links courses and their search pages', () => {
+    expect(courseHref({ basePath: '' })).toBe('/');
+    expect(courseHref({ basePath: '/data' })).toBe('/data/');
+    expect(searchHref({ basePath: '' })).toBe('/hledat');
+    expect(searchHref({ basePath: '/data' }, 'kontingenční tabulka')).toBe('/data/hledat?q=kontingen%C4%8Dn%C3%AD%20tabulka');
+  });
+
+  it('lists the courses for /course', () => {
+    expect(courseTargets(catalog)).toEqual([
+      { number: 1, id: 'agent', title: 'Testovací kurz', href: '/', basePath: '' },
+      { number: 2, id: 'data', title: 'Digitální akademie: Data', href: '/data/', basePath: '/data' },
+    ]);
+    expect(courseTargets(undefined)).toEqual([]);
+  });
+
+  it('builds the contexts of an additional course', () => {
+    const targets = courseTargets(catalog);
+    expect(homeContext(dataCourse, targets)).toEqual({
+      page: 'home',
+      lectures: lectureTargets(dataCourse),
+      courses: targets,
+      currentCourse: 'data',
+    });
+    expect(lectureTargets(dataCourse)).toEqual([
+      {
+        number: 1,
+        id: 'tabulky',
+        title: '1 – Tabulky',
+        href: '/data/lekce/tabulky/uvod',
+        parts: [{ number: 1, title: 'Úvod do tabulek', href: '/data/lekce/tabulky/uvod' }],
+      },
     ]);
   });
 });

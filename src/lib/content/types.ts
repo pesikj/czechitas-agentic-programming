@@ -4,6 +4,8 @@ export type Severity = 'error' | 'warning';
 
 export type IssueCode =
   | 'course-missing'
+  | 'course-id-reserved'
+  | 'course-id-duplicate'
   | 'yaml-invalid'
   | 'schema-invalid'
   | 'id-invalid'
@@ -40,22 +42,39 @@ export type TocNode =
   | { kind: 'group'; title: string; children: TocNode[] }
   | { kind: 'lecture'; lectureId: string };
 
+/** Id of the main course when the root `course.yaml` has no `id`. */
+export const DEFAULT_MAIN_COURSE_ID = 'agent';
+
+/** One course. (Was the whole repository before multiple courses.) */
 export interface ContentModel {
+  id: string;
   title: string;
+  /** `''` for the main course, `/<id>` for an additional course. */
+  basePath: string;
   /** Navigation tree in authored order. */
   toc: TocNode[];
   /** All lectures in navigation order (depth-first over the toc). */
   lectures: Lecture[];
-  /** All exercises keyed by their globally unique id. */
+  /** This course's exercises. */
+  exercises: Map<string, Exercise>;
+}
+
+/** All courses of the repository; `courses[0]` is the main course. */
+export interface Catalog {
+  courses: ContentModel[];
+  /** Every exercise of every course (ids are unique across the repository). */
   exercises: Map<string, Exercise>;
 }
 
 export interface Lecture {
   id: string;
+  courseId: string;
+  /** The course's URL prefix (see `ContentModel.basePath`). */
+  basePath: string;
   title: string;
   /** Readable without signing in (`public: true` in lecture.yaml), with its images. */
   public: boolean;
-  /** Lecture directory relative to the repository root, e.g. `lectures/uvod`. */
+  /** Lecture directory relative to the repository root, e.g. `lectures/uvod` or `data/lectures/uvod`. */
   dir: string;
   /** Parts in authored order. */
   parts: Part[];
@@ -86,6 +105,7 @@ export interface Exercise {
   revision: number;
   title?: string;
   fields: ExerciseField[];
+  courseId: string;
   lectureId: string;
   partId: string;
 }
@@ -103,6 +123,6 @@ export interface AssetRef {
 
 export interface LoadResult {
   /** Present only when there are no errors (warnings are allowed). */
-  model?: ContentModel;
+  model?: Catalog;
   issues: ValidationIssue[];
 }

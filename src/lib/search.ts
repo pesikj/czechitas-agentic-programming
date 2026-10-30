@@ -1,4 +1,5 @@
-// Full-text search over one content revision. Pure; the index is built with the revision snapshot.
+// Full-text search over one content revision. Pure; the index is built with the revision snapshot,
+// with the documents of every course (each search filters them to one course).
 import type { Nodes } from 'mdast';
 import { toString as toText } from 'mdast-util-to-string';
 import { visit } from 'unist-util-visit';
@@ -7,6 +8,7 @@ import type { ContentModel } from './content/types';
 import { partHref } from './navigation';
 
 export interface SearchDocument {
+  courseId: string;
   href: string;
   lectureTitle: string;
   partTitle: string;
@@ -55,12 +57,14 @@ function plainText(source: string, title: string): string {
   return pieces.join(' ').replace(/\s+/g, ' ').trim();
 }
 
+/** The search documents of one course. */
 export function buildSearchIndex(model: ContentModel): SearchDocument[] {
   return model.lectures.flatMap((lecture) =>
     lecture.parts.map((part) => {
       const text = plainText(part.source, part.title);
       return {
-        href: partHref(lecture.id, part.id),
+        courseId: model.id,
+        href: partHref(lecture, part.id),
         lectureTitle: lecture.title,
         partTitle: part.title,
         partNumber: part.number,

@@ -17,10 +17,14 @@ for (const issue of issues) {
 const errors = issues.filter((issue) => issue.severity === 'error').length;
 const warnings = issues.length - errors;
 if (model) {
-  const parts = model.lectures.reduce((sum, lecture) => sum + lecture.parts.length, 0);
-  console.log(
-    `\nOK: "${model.title}" — ${model.lectures.length} lectures, ${parts} parts, ${model.exercises.size} exercises, ${warnings} warnings.`,
-  );
+  console.log('');
+  for (const course of model.courses) {
+    const parts = course.lectures.reduce((sum, lecture) => sum + lecture.parts.length, 0);
+    console.log(
+      `OK: "${course.title}" (${course.id}) — ${course.lectures.length} lectures, ${parts} parts, ${course.exercises.size} exercises.`,
+    );
+  }
+  console.log(`${warnings} warnings.`);
 } else {
   console.log(`\nFAILED: ${errors} errors, ${warnings} warnings. This revision cannot be published.`);
   process.exit(1);

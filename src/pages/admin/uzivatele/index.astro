@@ -6,7 +6,7 @@ import { createAccounts, searchUsers, type BulkEntryResult, type Role, type User
 import { formField } from '../../../server/auth/request';
 import { accountStatusLabel, invitationStatusLabel, roleLabel } from '../../../server/admin-labels';
 import { otherContext } from '../../../lib/navigation';
-import { getContent } from '../../../server/content/provider';
+import { getCourseContent } from '../../../server/content/provider';
 import { czechCount } from '../../../server/format';
 
 const admin = Astro.locals.user;
@@ -38,7 +38,7 @@ const filtered = Boolean(query || status || role);
 // Only the address comes from the URL; the sentence is ours, so a link cannot show arbitrary text.
 const deletedEmail = params.get('smazano')?.slice(0, 254);
 const deletedMessage = deletedEmail ? `Účet ${deletedEmail} a jeho uložené odpovědi byly trvale smazány.` : undefined;
-const { model } = await getContent();
+const { model, courses } = await getCourseContent();
 
 const outcomeLabel: Record<BulkEntryResult['outcome'], string> = {
   created: 'vytvořen',
@@ -50,7 +50,7 @@ const created = results.filter((result) => result.outcome === 'created');
 const failedInvitations = created.filter((result) => result.outcome === 'created' && !result.invitation.sent);
 ---
 
-<CourseLayout title="Uživatelé" courseTitle={model?.title} model={model} context={otherContext(model)}>
+<CourseLayout title="Uživatelé" courseTitle={model?.title} model={model} context={otherContext(model, courses)}>
   {
     isAdmin ? (
       <div class="admin-page">

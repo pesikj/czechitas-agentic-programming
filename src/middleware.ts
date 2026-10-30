@@ -66,8 +66,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
     if (path === '/') return true;
     if (!path.startsWith('/lekce/') && !path.startsWith('/obsah/')) return false;
     // If the content cannot be loaded, fall back to requiring sign-in.
-    const { model } = await getContent().catch(() => ({ model: undefined }));
-    return model ? isPublicContentPath(model, path) : false;
+    const { model: catalog } = await getContent().catch(() => ({ model: undefined }));
+    return catalog ? isPublicContentPath(catalog, path) : false;
   }
 });
 

@@ -1,15 +1,36 @@
 // Navigation over the repository-derived lecture sequence. Shared by links and commands,
 // so clickable navigation and /next, /back always agree. Never wraps around.
-import type { CommandContext, LectureTarget } from './commands';
-import type { ContentModel, Lecture, Part } from './content/types';
+import type { CommandContext, CourseTarget, LectureTarget } from './commands';
+import type { Catalog, ContentModel, Lecture, Part } from './content/types';
 
-export function partHref(lectureId: string, partId: string): string {
-  return `/lekce/${encodeURIComponent(lectureId)}/${encodeURIComponent(partId)}`;
+export function partHref(lecture: Pick<Lecture, 'id' | 'basePath'>, partId: string): string {
+  return `${lecture.basePath}/lekce/${encodeURIComponent(lecture.id)}/${encodeURIComponent(partId)}`;
 }
 
 /** Link to a lecture: its first part. */
 export function lectureHref(lecture: Lecture): string {
-  return partHref(lecture.id, lecture.parts[0]!.id);
+  return partHref(lecture, lecture.parts[0]!.id);
+}
+
+/** A course's title page with its lecture list. */
+export function courseHref(course: Pick<ContentModel, 'basePath'>): string {
+  return `${course.basePath}/`;
+}
+
+/** A course's search page, with results for `query` if given. */
+export function searchHref(course: Pick<ContentModel, 'basePath'>, query?: string): string {
+  return `${course.basePath}/hledat${query ? `?q=${encodeURIComponent(query)}` : ''}`;
+}
+
+/** Courses for the command bar (`/course`), numbered in declaration order. */
+export function courseTargets(catalog: Catalog | undefined): CourseTarget[] {
+  return (catalog?.courses ?? []).map((course, index) => ({
+    number: index + 1,
+    id: course.id,
+    title: course.title,
+    href: courseHref(course),
+    basePath: course.basePath,
+  }));
 }
 
 export function findLecture(model: ContentModel, lectureId: string): Lecture | undefined {
@@ -64,17 +85,22 @@ export function lectureTargets(model: ContentModel | undefined): LectureTarget[]
     id: lecture.id,
     title: lecture.title,
     href: lectureHref(lecture),
-    parts: lecture.parts.map((part) => ({ number: part.number, title: part.title, href: partHref(lecture.id, part.id) })),
+    parts: lecture.parts.map((part) => ({ number: part.number, title: part.title, href: partHref(lecture, part.id) })),
   }));
 }
 
-/** Command-bar context for the home page. */
-export function homeContext(model: ContentModel | undefined): CommandContext {
-  return { page: 'home', lectures: lectureTargets(model) };
+/** The courses and the current one, shared by every command-bar context. */
+function courseContext(model: ContentModel | undefined, courses: CourseTarget[]) {
+  return { courses, ...(model ? { currentCourse: model.id } : {}) };
+}
+
+/** Command-bar context for a course's title page. */
+export function homeContext(model: ContentModel | undefined, courses: CourseTarget[] = []): CommandContext {
+  return { page: 'home', lectures: lectureTargets(model), ...courseContext(model, courses) };
 }
 
 /** Command-bar context for a lecture part. */
-export function partContext(model: ContentModel, lecture: Lecture, part: Part): CommandContext {
+export function partContext(model: ContentModel, lecture: Lecture, part: Part, courses: CourseTarget[] = []): CommandContext {
   const lectures = lectureTargets(model);
   const number = lectureNumber(model, lecture);
   const around = neighbours(model, lecture, part);
@@ -84,14 +110,15 @@ export function partContext(model: ContentModel, lecture: Lecture, part: Part): 
     page: 'part',
     lectures,
     lectureNumber: number,
-    ...(around.previous ? { previous: { title: around.previous.title, href: partHref(lecture.id, around.previous.id) } } : {}),
-    ...(around.next ? { next: { title: around.next.title, href: partHref(lecture.id, around.next.id) } } : {}),
+    ...(around.previous ? { previous: { title: around.previous.title, href: partHref(lecture, around.previous.id) } } : {}),
+    ...(around.next ? { next: { title: around.next.title, href: partHref(lecture, around.next.id) } } : {}),
     ...(previousLecture ? { previousLecture } : {}),
     ...(nextLecture ? { nextLecture } : {}),
+    ...courseContext(model, courses),
   };
 }
 
 /** Command-bar context for pages outside lectures (errors, not found). */
-export function otherContext(model: ContentModel | undefined): CommandContext {
-  return { page: 'other', lectures: lectureTargets(model) };
+export function otherContext(model: ContentModel | undefined, courses: CourseTarget[] = []): CommandContext {
+  return { page: 'other', lectures: lectureTargets(model), ...courseContext(model, courses) };
 }

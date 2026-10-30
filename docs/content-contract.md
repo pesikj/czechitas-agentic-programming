@@ -1,26 +1,34 @@
 # Content contract
 
-How the content repository (`czechitas-agentic-programming-content`) describes course materials for the website. It defines the **input format**, not the syllabus: lectures, parts and their order come entirely from the repository.
+How the content repository (`czechitas-agentic-programming-content`) describes course materials for the website. It defines the **input format**, not the syllabus: courses, lectures, parts and their order come entirely from the repository.
 
 Implementation: `src/lib/content/` · Validate a checkout: `npm run content:validate -- <dir>`
 
 ## Repository layout
 
 ```
-course.yaml                  # course title and ordered navigation
+course.yaml                  # main course: id, title, additional courses, ordered navigation
 lectures/
   <directory>/               # any directory name, e.g. 01-uvod
     lecture.yaml             # lecture id, title, ordered parts
     <part>.md                # one file per lecture part
     images/…                 # images (any subdirectory is fine)
+data/                        # an additional course, listed in the root course.yaml
+  course.yaml                # its title and ordered navigation
+  lectures/…                 # same layout as above
 ```
+
+The main course lives at the repository root. Each additional course lives in a subdirectory named after its id and follows the same rules relative to that directory. All courses are validated and published together. Reported file paths and image and file paths stay **relative to the repository root** (e.g. `data/lectures/01-tabulky/images/graf.png`).
 
 Files and directories can be renamed or moved freely: **identity comes from ids, never from paths.**
 
 ## `course.yaml`
 
 ```yaml
+id: agent                    # optional, default "agent"; the main course's id
 title: Agentní programování s Codex CLI a Claude Code
+courses:                     # optional; additional courses, each in the directory of that name
+  - data
 toc:
   - title: Začínáme          # a group (nested navigation)
     items:
@@ -31,6 +39,8 @@ toc:
 
 - `toc` order is the navigation order. Groups can be nested and contain at least one item.
 - A directory in `lectures/` that is not listed is reported as a warning and is not shown.
+- `courses` order is the course order (`/course 2` is the first additional course). An additional course id follows the id pattern and becomes its URL prefix (`/data/`), so it must not be the main course id or a site address: `404`, `_astro`, `_image`, `admin`, `health`, `hledat`, `lekce`, `moje-odpovedi`, `nahled-odpovedi`, `obnova-hesla`, `obsah`, `odhlaseni`, `odpovedi`, `prihlaseni`, `zapomenute-heslo`, `zmena-hesla`.
+- An additional course's `<id>/course.yaml` has only `title` and `toc` (its id is the directory name; it cannot declare further courses).
 
 ## `lecture.yaml`
 
@@ -66,12 +76,13 @@ title: Co je programovací agent
 
 | Id | Pattern | Unique within | Used for |
 |---|---|---|---|
-| Lecture `id` | `^[a-z0-9]+(-[a-z0-9]+)*$` | course | URL `/lekce/<lectureId>/<partId>` |
+| Course `id` | `^[a-z0-9]+(-[a-z0-9]+)*$` | repository | URL prefix of an additional course `/<courseId>/` |
+| Lecture `id` | same | **whole repository** (all courses) | URL `/lekce/<lectureId>/<partId>` |
 | Part `id` | same | its lecture | URL, bookmarks |
-| Exercise `id` | same | **whole course** | linking saved responses |
+| Exercise `id` | same | **whole repository** (all courses) | linking saved responses |
 | Field `id` | same | its exercise | keys of saved response fields |
 
-Use lowercase letters without diacritics, digits and single hyphens. **Do not change an id once published.** Changing it breaks bookmarks, and for exercises it detaches the saved responses (the old responses stay readable by administrators).
+Use lowercase letters without diacritics, digits and single hyphens. **Do not change an id once published.** Changing it breaks bookmarks, and for exercises it detaches the saved responses (the old responses stay readable by administrators). **Never reuse a published exercise id, in either course**, even after the exercise is removed: learners' old answers would attach to the new exercise. Validation cannot detect this.
 
 ## Exercises
 
@@ -153,15 +164,17 @@ The same dialect is used for course pages, learner response previews and adminis
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `course-missing` | error | No `course.yaml` |
+| `course-missing` | error | No `course.yaml` at the root or in a listed course directory |
+| `course-id-reserved` | error | An additional course id is the main course id or a site address |
+| `course-id-duplicate` | error | An additional course is listed twice in `courses` |
 | `yaml-invalid` | error | YAML syntax error |
 | `schema-invalid` | error | Missing or unknown keys, wrong types, missing front matter |
 | `id-invalid` | error | Id does not match the pattern |
 | `lecture-missing` | error | A listed lecture directory or its `lecture.yaml` is missing |
-| `lecture-id-duplicate` / `part-id-duplicate` | error | Duplicate id |
+| `lecture-id-duplicate` / `part-id-duplicate` | error | Duplicate id (lecture ids across all courses) |
 | `part-missing` / `part-path-invalid` | error | A listed part does not exist or is not a `.md` file inside the lecture |
 | `exercise-invalid` | error | Malformed exercise YAML or schema |
-| `exercise-id-duplicate` / `field-id-duplicate` | error | Duplicate exercise or field id |
+| `exercise-id-duplicate` / `field-id-duplicate` | error | Duplicate exercise id (across all courses) or field id |
 | `alternatives-invalid` | error | Malformed alternatives block |
 | `asset-path-invalid` / `asset-outside-repo` / `asset-type-unsupported` | error | Unusable image or linked-file path |
 | `lecture-unlisted` / `part-unlisted` | warning | A file or directory exists but is not listed |

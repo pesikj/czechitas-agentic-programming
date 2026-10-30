@@ -36,7 +36,7 @@ The prepared content of a published revision (`src/server/content/snapshot-store
 
 | Table | Columns |
 |---|---|
-| `content_snapshots` | `revision_id` (primary key, references `content_revisions`), `model` (navigation model as JSON; the exercise map is rebuilt from the parts), `rendered` (sanitized HTML by `lectureId/partId`), `search` (search index), `created_at` |
+| `content_snapshots` | `revision_id` (primary key, references `content_revisions`), `model` (navigation model of every course as JSON, `{ courses: [...] }`; the exercise maps are rebuilt from the parts, and a row in the older single-course format is rebuilt from its commit), `rendered` (sanitized HTML by `lectureId/partId`), `search` (search index), `created_at` |
 | `content_assets` | `(revision_id, path)` primary key, `content_type`, `width`, `height`, `data` (file bytes, `bytea`). Only images and linked files referenced by the content are stored. |
 
 ## `responses`

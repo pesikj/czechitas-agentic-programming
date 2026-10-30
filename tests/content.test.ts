@@ -3,20 +3,27 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadContent, renderMarkdown } from '../src/lib/content/index';
+import { RESERVED_COURSE_IDS } from '../src/lib/content/validate';
 
 const fixtures = path.resolve('fixtures/content');
 
 describe('loadContent — minimal fixture', async () => {
   const { model, issues } = await loadContent(path.join(fixtures, 'minimal'));
 
+  const course = model?.courses[0];
+
   it('loads without issues', () => {
     expect(issues).toEqual([]);
     expect(model).toBeDefined();
   });
 
+  it('is a single main course with the default id', () => {
+    expect(model!.courses.map((c) => [c.id, c.basePath])).toEqual([['agent', '']]);
+  });
+
   it('keeps the authored navigation tree and order', () => {
-    expect(model!.title).toBe('Testovací kurz');
-    expect(model!.toc).toEqual([
+    expect(course!.title).toBe('Testovací kurz');
+    expect(course!.toc).toEqual([
       {
         kind: 'group',
         title: 'Základy',
@@ -27,11 +34,11 @@ describe('loadContent — minimal fixture', async () => {
       },
       { kind: 'lecture', lectureId: 'zaver' },
     ]);
-    expect(model!.lectures.map((lecture) => lecture.id)).toEqual(['zaklady', 'prompty', 'zaver']);
+    expect(course!.lectures.map((lecture) => lecture.id)).toEqual(['zaklady', 'prompty', 'zaver']);
   });
 
   it('numbers parts and takes identity from ids, not file names', () => {
-    const [first] = model!.lectures;
+    const [first] = course!.lectures;
     expect(first!.dir).toBe('lectures/01-zaklady');
     expect(first!.parts.map((part) => [part.id, part.number, part.file])).toEqual([
       ['uvod', 1, 'lectures/01-zaklady/01-uvod.md'],
@@ -41,20 +48,96 @@ describe('loadContent — minimal fixture', async () => {
 
   it('extracts exercises with fields', () => {
     const exercise = model!.exercises.get('prvni-prompt');
-    expect(exercise).toMatchObject({ revision: 1, lectureId: 'zaklady', partId: 'prvni-cviceni' });
+    expect(exercise).toMatchObject({ revision: 1, lectureId: 'zaklady', partId: 'prvni-cviceni', courseId: 'agent' });
     expect(exercise!.fields.map((field) => field.label)).toEqual(['Použitý prompt', 'Výsledek a ověření', 'Reflexe']);
   });
 
   it('resolves image assets relative to the part', () => {
-    expect(model!.lectures[0]!.parts[0]!.assets).toEqual([
+    expect(course!.lectures[0]!.parts[0]!.assets).toEqual([
       { kind: 'image', url: 'images/schema.png', path: 'lectures/01-zaklady/images/schema.png', exists: true, line: 10 },
     ]);
   });
 
   it('resolves linked files in subdirectories, including reference-style links', () => {
-    expect(model!.lectures[0]!.parts[1]!.assets).toEqual([
+    expect(course!.lectures[0]!.parts[1]!.assets).toEqual([
       { kind: 'file', url: 'soubory/prodeje.csv', path: 'lectures/01-zaklady/soubory/prodeje.csv', exists: true, line: 6 },
       { kind: 'file', url: 'skripty/analyza.py', path: 'lectures/01-zaklady/skripty/analyza.py', exists: true, line: 6 },
+    ]);
+  });
+});
+
+describe('loadContent — courses fixture', async () => {
+  const { model, issues } = await loadContent(path.join(fixtures, 'courses'));
+  const data = model?.courses[1];
+
+  it('loads the main course and the additional courses in declaration order', () => {
+    expect(issues).toEqual([]);
+    expect(model!.courses.map((c) => [c.id, c.title, c.basePath])).toEqual([
+      ['agent', 'Testovací kurz', ''],
+      ['data', 'Digitální akademie: Data', '/data'],
+    ]);
+  });
+
+  it('keeps repository-relative paths for the additional course', () => {
+    const [lecture] = data!.lectures;
+    expect(lecture).toMatchObject({ id: 'tabulky', dir: 'data/lectures/01-tabulky', basePath: '/data', courseId: 'data' });
+    expect(lecture!.parts[0]!.file).toBe('data/lectures/01-tabulky/tabulky.md');
+    expect(lecture!.parts[0]!.assets.map((asset) => asset.path)).toEqual(['data/lectures/01-tabulky/images/graf.png']);
+    expect(lecture!.parts[0]!.assets[0]!.exists).toBe(true);
+  });
+
+  it('collects the exercises of every course, each with its course', () => {
+    expect([...model!.exercises.values()].map((exercise) => [exercise.id, exercise.courseId])).toEqual([
+      ['prvni-prompt', 'agent'],
+      ['prvni-tabulka', 'data'],
+    ]);
+    expect([...data!.exercises.keys()]).toEqual(['prvni-tabulka']);
+    expect([...model!.courses[0]!.exercises.keys()]).toEqual(['prvni-prompt']);
+  });
+});
+
+describe('loadContent — course declarations', () => {
+  async function load(courseYaml: string, dataCourseYaml = 'title: D\ntoc:\n  - lecture: b\n') {
+    const dir = await mkdtemp(path.join(tmpdir(), 'content-'));
+    await mkdir(path.join(dir, 'lectures/a'), { recursive: true });
+    await mkdir(path.join(dir, 'data/lectures/b'), { recursive: true });
+    await writeFile(path.join(dir, 'course.yaml'), courseYaml);
+    await writeFile(path.join(dir, 'lectures/a/lecture.yaml'), 'id: a\ntitle: A\nparts: [p.md]\n');
+    await writeFile(path.join(dir, 'lectures/a/p.md'), '---\nid: p\ntitle: P\n---\n\nText\n');
+    await writeFile(path.join(dir, 'data/course.yaml'), dataCourseYaml);
+    await writeFile(path.join(dir, 'data/lectures/b/lecture.yaml'), 'id: b\ntitle: B\nparts: [p.md]\n');
+    await writeFile(path.join(dir, 'data/lectures/b/p.md'), '---\nid: p\ntitle: P\n---\n\nText\n');
+    const result = await loadContent(dir);
+    await rm(dir, { recursive: true });
+    return result;
+  }
+  const errors = (result: Awaited<ReturnType<typeof load>>) =>
+    result.issues.filter((issue) => issue.severity === 'error').map((issue) => [issue.code, issue.file]);
+
+  it('takes the main course id from course.yaml', async () => {
+    const { model } = await load('id: kurz\ntitle: T\ntoc:\n  - lecture: a\ncourses: [data]\n');
+    expect(model!.courses.map((c) => c.id)).toEqual(['kurz', 'data']);
+  });
+
+  it('rejects a course declared twice', async () => {
+    expect(errors(await load('title: T\ntoc:\n  - lecture: a\ncourses: [data, data]\n'))).toEqual([['course-id-duplicate', 'course.yaml']]);
+  });
+
+  it('reserves the main course id for additional courses', async () => {
+    expect(errors(await load('id: data\ntitle: T\ntoc:\n  - lecture: a\ncourses: [data]\n'))).toEqual([['course-id-reserved', 'course.yaml']]);
+  });
+
+  it('allows neither id nor courses in an additional course.yaml', async () => {
+    for (const extra of ['id: data\n', 'courses: [x]\n']) {
+      const result = await load('title: T\ntoc:\n  - lecture: a\ncourses: [data]\n', `${extra}title: D\ntoc:\n  - lecture: b\n`);
+      expect(errors(result)).toEqual([['schema-invalid', 'data/course.yaml']]);
+    }
+  });
+
+  it('reserves the names of site routes', () => {
+    expect(RESERVED_COURSE_IDS).toEqual([
+      '404', '_astro', '_image', 'admin', 'health', 'hledat', 'lekce', 'moje-odpovedi', 'nahled-odpovedi',
+      'obnova-hesla', 'obsah', 'odhlaseni', 'odpovedi', 'prihlaseni', 'zapomenute-heslo', 'zmena-hesla',
     ]);
   });
 });
@@ -68,7 +151,7 @@ describe('loadContent — lecture titles', () => {
     await writeFile(path.join(dir, 'lectures/a/p.md'), '---\nid: p\ntitle: P\n---\n\nText\n');
     const { model } = await loadContent(dir);
     await rm(dir, { recursive: true });
-    return model!.lectures[0]!.title;
+    return model!.courses[0]!.lectures[0]!.title;
   }
 
   it('drops leading zeros from the authored lecture number', async () => {
@@ -100,7 +183,7 @@ describe('loadContent — linked files', () => {
       '[web](https://example.com/data.csv) [mail](mailto:a@b.cz) [hledat](/hledat) [kotva](#cast) [stránka](jinde.html)',
     );
     expect(issues).toEqual([]);
-    expect(model!.lectures[0]!.parts[0]!.assets).toEqual([]);
+    expect(model!.courses[0]!.lectures[0]!.parts[0]!.assets).toEqual([]);
   });
 
   it('rejects linked files outside the repository', async () => {
@@ -119,11 +202,15 @@ describe('loadContent — invalid fixtures', () => {
     'exercise-invalid': 'exercise-invalid',
     'exercise-id-duplicate': 'exercise-id-duplicate',
     'asset-outside-repo': 'asset-outside-repo',
+    'course-id-reserved': 'course-id-reserved',
+    'course-dir-missing': 'course-missing',
   };
+  /** Missing course files have no line to point at. */
+  const withoutLine = new Set(['course-missing', 'course-dir-missing']);
 
   it('has a test for every invalid fixture', async () => {
     const dirs = await readdir(path.join(fixtures, 'invalid'));
-    expect(dirs.sort()).toEqual([...Object.keys(errorCases), 'asset-missing'].sort());
+    expect(dirs.sort()).toEqual([...Object.keys(errorCases), 'asset-missing', 'cross-course-duplicate'].sort());
   });
 
   for (const [dir, code] of Object.entries(errorCases)) {
@@ -132,9 +219,25 @@ describe('loadContent — invalid fixtures', () => {
       expect(model).toBeUndefined();
       const errors = issues.filter((issue) => issue.severity === 'error');
       expect(errors.map((issue) => issue.code)).toEqual([code]);
-      if (dir !== 'course-missing') expect(errors[0]!.line).toBeTypeOf('number');
+      if (!withoutLine.has(dir)) expect(errors[0]!.line).toBeTypeOf('number');
     });
   }
+
+  it('reports where each error is', async () => {
+    const reserved = await loadContent(path.join(fixtures, 'invalid', 'course-id-reserved'));
+    expect(reserved.issues).toMatchObject([{ code: 'course-id-reserved', file: 'course.yaml' }]);
+    const missing = await loadContent(path.join(fixtures, 'invalid', 'course-dir-missing'));
+    expect(missing.issues).toMatchObject([{ code: 'course-missing', file: 'data/course.yaml' }]);
+  });
+
+  it('rejects lecture and exercise ids reused across courses', async () => {
+    const { model, issues } = await loadContent(path.join(fixtures, 'invalid', 'cross-course-duplicate'));
+    expect(model).toBeUndefined();
+    expect(issues.filter((issue) => issue.severity === 'error').map((issue) => [issue.code, issue.file])).toEqual([
+      ['lecture-id-duplicate', 'data/lectures/01-tabulky/lecture.yaml'],
+      ['exercise-id-duplicate', 'data/lectures/01-tabulky/tabulky.md'],
+    ]);
+  });
 
   it('reports a missing (wrong-case) image as a warning and still loads', async () => {
     const { model, issues } = await loadContent(path.join(fixtures, 'invalid', 'asset-missing'));

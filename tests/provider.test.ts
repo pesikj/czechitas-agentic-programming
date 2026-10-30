@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-process.env.CONTENT_DIR = path.resolve('fixtures/content/minimal');
+process.env.CONTENT_DIR = path.resolve('fixtures/content/courses');
 const provider = await import('../src/server/content/provider');
 const { FILE_EXTENSIONS, IMAGE_EXTENSIONS } = await import('../src/lib/content/validate');
 
@@ -41,18 +41,42 @@ describe('content provider', () => {
   });
 
   it('renders links to files with protected asset URLs', async () => {
-    const { model } = await provider.getContent();
+    const { model } = await provider.getCourseContent();
     const html = await provider.getRenderedPart(model!.lectures[0]!.parts[1]!);
     expect(html).toContain('<a href="/obsah/lectures/01-zaklady/soubory/prodeje.csv" download>data o prodejích</a>');
     expect(html).toContain('<a href="/obsah/lectures/01-zaklady/skripty/analyza.py" download>skript</a>');
   });
 
   it('renders parts with protected asset URLs and image sizes', async () => {
-    const { model } = await provider.getContent();
+    const { model } = await provider.getCourseContent();
     const part = model!.lectures[0]!.parts[0]!;
     const html = await provider.getRenderedPart(part);
     expect(html).toContain('src="/obsah/lectures/01-zaklady/images/schema.png"');
     expect(html).toContain('width="2" height="2"');
+  });
+
+  it('supplies each course of the catalog', async () => {
+    const main = await provider.getCourseContent();
+    expect([main.state, main.model?.id, main.catalog?.courses.length]).toEqual(['ready', 'agent', 2]);
+    expect(main.courses.map((course) => course.href)).toEqual(['/', '/data/']);
+    const data = await provider.getCourseContent('data');
+    expect([data.state, data.model?.id, data.model?.title]).toEqual(['ready', 'data', 'Digitální akademie: Data']);
+    const unknown = await provider.getCourseContent('neexistuje');
+    expect([unknown.state, unknown.model]).toEqual(['ready', undefined]);
+  });
+
+  it('searches one course at a time', async () => {
+    const hits = await provider.searchContent('kontingenční', 'data');
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.href).toMatch(/^\/data\/lekce\//);
+    expect(await provider.searchContent('kontingenční', 'agent')).toEqual([]);
+  });
+
+  it('serves and renders the assets of an additional course', async () => {
+    const repoPath = 'data/lectures/01-tabulky/images/graf.png';
+    expect((await provider.resolveAsset(repoPath))?.body).toEqual(readFileSync(path.join(process.env.CONTENT_DIR!, repoPath)));
+    const { model } = await provider.getCourseContent('data');
+    expect(await provider.getRenderedPart(model!.lectures[0]!.parts[0]!)).toContain(`src="/obsah/${repoPath}"`);
   });
 
   it('encodes asset URLs', () => {

@@ -1,0 +1,9 @@
+title: Testovací kurz
+toc:
+  - title: Základy
+    items:
+      - lecture: 01-zaklady
+      - lecture: 02-prompty
+  - lecture: 03-zaver
+courses:
+  - lekce

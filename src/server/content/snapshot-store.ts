@@ -3,13 +3,13 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { and, eq, ne } from 'drizzle-orm';
-import type { ContentModel, Exercise } from '../../lib/content/types';
+import type { Catalog, ContentModel, Exercise } from '../../lib/content/types';
 import { getDb } from '../db/client';
 import { contentAssets, contentRevisions, contentSnapshots } from '../db/schema';
 import type { Snapshot } from './provider';
 
-/** `ContentModel` as JSON: the exercise map is rebuilt from the parts on load. */
-export type StoredModel = Omit<ContentModel, 'exercises'>;
+/** `Catalog` as JSON: the exercise maps are rebuilt from the parts on load. */
+export type StoredModel = { courses: Omit<ContentModel, 'exercises'>[] };
 
 type Db = ReturnType<typeof getDb>;
 type Transaction = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -21,7 +21,7 @@ type Transaction = Parameters<Parameters<Db['transaction']>[0]>[0];
 export async function saveSnapshot(tx: Db | Transaction, revisionId: string, snapshot: Snapshot): Promise<void> {
   const model = snapshot.result.model;
   if (!model || !snapshot.dir) throw new Error('Only a valid snapshot built from a directory can be saved.');
-  const { exercises: _exercises, ...stored } = model;
+  const stored: StoredModel = { courses: model.courses.map(({ exercises: _exercises, ...course }) => course) };
   await tx.insert(contentSnapshots).values({
     revisionId,
     model: stored,
@@ -40,7 +40,10 @@ export async function saveSnapshot(tx: Db | Transaction, revisionId: string, sna
   }
 }
 
-/** The stored snapshot of a revision, without image bytes, or undefined if there is none. */
+/**
+ * The stored snapshot of a revision, without image bytes, or undefined if there is none or it
+ * was stored in the format from before multiple courses (it is then rebuilt).
+ */
 export async function loadSnapshot(revision: { id: string; sha: string }): Promise<Snapshot | undefined> {
   const db = getDb();
   const [row] = await db
@@ -48,20 +51,25 @@ export async function loadSnapshot(revision: { id: string; sha: string }): Promi
     .from(contentSnapshots)
     .innerJoin(contentRevisions, eq(contentRevisions.id, contentSnapshots.revisionId))
     .where(eq(contentSnapshots.revisionId, revision.id));
-  if (!row) return undefined;
+  if (!row || !Array.isArray(row.model.courses)) return undefined;
 
   const assets = await db
     .select({ path: contentAssets.path, contentType: contentAssets.contentType, width: contentAssets.width, height: contentAssets.height })
     .from(contentAssets)
     .where(eq(contentAssets.revisionId, revision.id));
 
-  const exercises = new Map<string, Exercise>();
-  for (const lecture of row.model.lectures) {
-    for (const part of lecture.parts) for (const exercise of part.exercises) exercises.set(exercise.id, exercise);
+  const catalog: Catalog = { courses: [], exercises: new Map() };
+  for (const stored of row.model.courses) {
+    const exercises = new Map<string, Exercise>();
+    for (const lecture of stored.lectures) {
+      for (const part of lecture.parts) for (const exercise of part.exercises) exercises.set(exercise.id, exercise);
+    }
+    for (const [id, exercise] of exercises) catalog.exercises.set(id, exercise);
+    catalog.courses.push({ ...stored, exercises });
   }
   return {
     revision,
-    result: { model: { ...row.model, exercises }, issues: row.issues },
+    result: { model: catalog, issues: row.issues },
     assets: new Map(
       assets.map((asset) => [
         asset.path,
@@ -84,6 +92,11 @@ export async function readAsset(revisionId: string, repoPath: string): Promise<B
     .from(contentAssets)
     .where(and(eq(contentAssets.revisionId, revisionId), eq(contentAssets.path, repoPath)));
   return row?.data;
+}
+
+/** Removes the snapshot of a revision, with its assets. */
+export async function deleteSnapshot(tx: Db | Transaction, revisionId: string): Promise<void> {
+  await tx.delete(contentSnapshots).where(eq(contentSnapshots.revisionId, revisionId));
 }
 
 /** Removes the snapshots of every revision except `keepRevisionId` (their history rows stay). */

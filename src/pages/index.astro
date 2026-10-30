@@ -5,9 +5,9 @@ import HelpList from '../components/HelpList.astro';
 import type { Lecture, TocNode } from '../lib/content/types';
 import { visibleModel } from '../lib/content/visibility';
 import { homeContext, lectureHref } from '../lib/navigation';
-import { getContent } from '../server/content/provider';
+import { getCourseContent } from '../server/content/provider';
 
-const content = await getContent();
+const content = await getCourseContent();
 const { issues } = content;
 // Visitors see the title page with public lectures only.
 const signedIn = Boolean(Astro.locals.user);
@@ -28,7 +28,7 @@ const toItems = (nodes: TocNode[]): Item[] =>
 const items = toItems(model?.toc ?? []);
 ---
 
-<CourseLayout title={model?.title ?? 'Obsah nelze načíst'} courseTitle={model?.title} model={model} context={homeContext(model)}>
+<CourseLayout title={model?.title ?? 'Obsah nelze načíst'} courseTitle={model?.title} model={model} context={homeContext(model, content.courses)}>
   {
     model ? (
       <div class="home">
