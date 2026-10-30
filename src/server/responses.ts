@@ -27,10 +27,11 @@ export async function countResponses(userId: string): Promise<number> {
   return row?.count ?? 0;
 }
 
-export async function listResponses(filter: { userId?: string; exerciseId?: string }): Promise<ResponseWithUser[]> {
+export async function listResponses(filter: { userId?: string; exerciseId?: string; courseId?: string }): Promise<ResponseWithUser[]> {
   const conditions = [
     filter.userId ? eq(responses.userId, filter.userId) : undefined,
     filter.exerciseId ? eq(responses.exerciseId, filter.exerciseId) : undefined,
+    filter.courseId ? eq(responses.courseId, filter.courseId) : undefined,
   ].filter((condition) => condition !== undefined);
   const rows = await getDb()
     .select({ response: responses, email: users.email })
@@ -87,6 +88,7 @@ export async function saveResponse(input: {
   const lecture = course?.lectures.find((candidate) => candidate.id === exercise.lectureId);
   const part = lecture?.parts.find((candidate) => candidate.id === exercise.partId);
   const values = {
+    courseId: exercise.courseId,
     exerciseRevision: exercise.revision,
     contentRevisionId: input.contentRevisionId ?? null,
     lectureId: exercise.lectureId,
@@ -104,6 +106,20 @@ export async function saveResponse(input: {
     .onConflictDoUpdate({ target: [responses.userId, responses.exerciseId], set: values })
     .returning({ savedAt: responses.savedAt });
   return { ok: true, savedAt: saved!.savedAt };
+}
+
+/** Splits answers by course: catalog order first, unknown course ids last (titled by their id). */
+export function groupByCourse<T extends { courseId: string }>(
+  records: T[],
+  catalog: Catalog | undefined,
+): { courseId: string; title: string; records: T[] }[] {
+  const known = (catalog?.courses ?? []).map((course) => ({ courseId: course.id, title: course.title }));
+  const unknown = [...new Set(records.map((record) => record.courseId))]
+    .filter((courseId) => !known.some((course) => course.courseId === courseId))
+    .map((courseId) => ({ courseId, title: courseId }));
+  return [...known, ...unknown]
+    .map((course) => ({ ...course, records: records.filter((record) => record.courseId === course.courseId) }))
+    .filter((group) => group.records.length > 0);
 }
 
 export type RevisionNote = 'current' | 'older-revision' | 'removed';

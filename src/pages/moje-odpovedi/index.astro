@@ -4,11 +4,12 @@ import AnswerCard from '../../components/AnswerCard.astro';
 import { otherContext } from '../../lib/navigation';
 import { getCourseContent } from '../../server/content/provider';
 import { czechCount } from '../../server/format';
-import { listResponses } from '../../server/responses';
+import { groupByCourse, listResponses } from '../../server/responses';
 
 const user = Astro.locals.user!;
 const records = await listResponses({ userId: user.id });
 const { model, catalog, courses } = await getCourseContent();
+const groups = groupByCourse(records, catalog);
 ---
 
 <CourseLayout title="Moje odpovědi" courseTitle={model?.title} model={model} context={otherContext(model, courses)} crumbs={[{ label: 'moje-odpovedi' }]}>
@@ -25,15 +26,20 @@ const { model, catalog, courses } = await getCourseContent();
               Stáhnout všechny odpovědi ({czechCount(records.length, 'odpověď', 'odpovědi', 'odpovědí')}) jako Markdown
             </a>
           </div>
-          {records.map((record) => (
-            <>
-              <AnswerCard record={record} catalog={catalog} />
-              <p class="page-actions">
-                <a href={`/moje-odpovedi/export.md?cviceni=${encodeURIComponent(record.exerciseId)}`} download>
-                  Stáhnout tuto odpověď
-                </a>
-              </p>
-            </>
+          {groups.map((group) => (
+            <section aria-labelledby={`kurz-${group.courseId}`}>
+              <h2 id={`kurz-${group.courseId}`}>{group.title}</h2>
+              {group.records.map((record) => (
+                <>
+                  <AnswerCard record={record} catalog={catalog} headingLevel={3} />
+                  <p class="page-actions">
+                    <a href={`/moje-odpovedi/export.md?cviceni=${encodeURIComponent(record.exerciseId)}`} download>
+                      Stáhnout tuto odpověď
+                    </a>
+                  </p>
+                </>
+              ))}
+            </section>
           ))}
         </>
       )

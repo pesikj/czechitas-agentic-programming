@@ -45,9 +45,10 @@ The **one current saved answer per learner and exercise**. Primary key: `(user_i
 
 | Column | Notes |
 |---|---|
+| `course_id` | The course of the exercise at save time (required; migration `0001` fills existing rows with `agent`) |
 | `exercise_id`, `exercise_revision` | Compared with the current exercise to flag answers to an earlier revision |
 | `content_revision_id` | The published revision the answer was saved against |
-| `lecture_id`, `part_id`, `lecture_title`, `part_title`, `exercise_title`, `field_labels` | Snapshots taken at save time, so answers stay listable and exportable after the exercise moves or is removed (titles added in migration `0001`) |
+| `lecture_id`, `part_id`, `lecture_title`, `part_title`, `exercise_title`, `field_labels` | Snapshots taken at save time, so answers stay listable and exportable after the exercise moves or is removed |
 | `fields` | `{ fieldId: markdown }` |
 | `saved_at` | Last successful save |
 

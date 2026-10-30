@@ -159,6 +159,7 @@ export const responses = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     exerciseId: text('exercise_id').notNull(),
+    courseId: text('course_id').notNull(),
     exerciseRevision: integer('exercise_revision').notNull(),
     contentRevisionId: uuid('content_revision_id').references(() => contentRevisions.id, { onDelete: 'set null' }),
     lectureId: text('lecture_id').notNull(),

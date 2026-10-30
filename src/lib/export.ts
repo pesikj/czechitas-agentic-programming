@@ -5,6 +5,8 @@ export interface ExportRecord {
   exerciseTitle: string | null;
   lectureTitle: string | null;
   partTitle: string | null;
+  /** When the records span several courses, they are grouped under their course titles. */
+  courseTitle?: string | null;
   fieldLabels: Record<string, string>;
   fields: Record<string, string>;
   savedAt: Date;
@@ -18,13 +20,22 @@ export function responsesToMarkdown(records: ExportRecord[], heading: { title: s
   lines.push(`Exportováno: ${date.format(heading.exportedAt ?? new Date())}`, '');
   if (records.length === 0) lines.push('Žádné uložené odpovědi.', '');
 
+  const grouped = new Set(records.map((record) => record.courseTitle ?? null)).size > 1;
+  const recordHeading = grouped ? '###' : '##';
+  const fieldHeading = grouped ? '####' : '###';
+  let currentCourse: string | null | undefined;
+
   for (const record of records) {
+    if (grouped && record.courseTitle !== currentCourse) {
+      currentCourse = record.courseTitle;
+      lines.push(`## ${currentCourse ?? ''}`, '');
+    }
     const location = [record.lectureTitle, record.partTitle].filter(Boolean).join(' › ');
     const name = record.exerciseTitle ?? record.exerciseId;
-    lines.push('---', '', `## ${location ? `${location}: ` : ''}${name}`, '');
+    lines.push('---', '', `${recordHeading} ${location ? `${location}: ` : ''}${name}`, '');
     lines.push(`Cvičení \`${record.exerciseId}\`, revize ${record.exerciseRevision} · uloženo ${date.format(record.savedAt)}`, '');
     for (const [fieldId, value] of Object.entries(record.fields)) {
-      lines.push(`### ${record.fieldLabels[fieldId] ?? fieldId}`, '', value.trim() === '' ? '_(nevyplněno)_' : value.trimEnd(), '');
+      lines.push(`${fieldHeading} ${record.fieldLabels[fieldId] ?? fieldId}`, '', value.trim() === '' ? '_(nevyplněno)_' : value.trimEnd(), '');
     }
   }
   return `${lines.join('\n').trimEnd()}\n`;

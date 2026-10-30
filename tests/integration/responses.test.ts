@@ -6,12 +6,17 @@ import { hashPassword } from '../../src/server/auth/password';
 import { getDb } from '../../src/server/db/client';
 import { users } from '../../src/server/db/schema';
 import { buildSnapshot } from '../../src/server/content/provider';
-import { countResponses, getResponse, listResponses, revisionNote, saveResponse } from '../../src/server/responses';
+import { countResponses, getResponse, groupByCourse, listResponses, revisionNote, saveResponse } from '../../src/server/responses';
 import { testAddress } from '../support/mailpit';
 
 const { result } = await buildSnapshot(path.resolve('fixtures/content/minimal'));
 const catalog = result.model!;
 const exercise = catalog.exercises.get('prvni-prompt')!;
+
+const { result: twoCourses } = await buildSnapshot(path.resolve('fixtures/content/courses'));
+const multiCatalog = twoCourses.model!;
+const mainExercise = multiCatalog.exercises.get('prvni-prompt')!;
+const dataExercise = multiCatalog.exercises.get('prvni-tabulka')!;
 
 async function learner(label: string) {
   const [user] = await getDb()
@@ -79,5 +84,31 @@ describe('saved responses', () => {
     await saveResponse({ userId: user.id, exercise, catalog, fields: { prompt: 'Smazat' } });
     expect((await deleteAccount(admin.id, user.id, user.email)).ok).toBe(true);
     expect(await countResponses(user.id)).toBe(0);
+  });
+
+  it('stores the course of the exercise, filters by it and groups in catalog order', async () => {
+    const user = await learner('courses');
+    // The data answer is saved first, so the order below comes from the catalog, not from saving.
+    await saveResponse({ userId: user.id, exercise: dataExercise, catalog: multiCatalog, fields: { postup: 'Tabulka' } });
+    await saveResponse({ userId: user.id, exercise: mainExercise, catalog: multiCatalog, fields: { prompt: 'Prompt' } });
+    expect((await getResponse(user.id, 'prvni-tabulka'))?.courseId).toBe('data');
+    expect((await getResponse(user.id, 'prvni-prompt'))?.courseId).toBe('agent');
+
+    const dataOnly = await listResponses({ userId: user.id, courseId: 'data' });
+    expect(dataOnly.map((record) => record.exerciseId)).toEqual(['prvni-tabulka']);
+
+    const groups = groupByCourse(await listResponses({ userId: user.id }), multiCatalog);
+    expect(groups.map((group) => [group.courseId, group.title, group.records.map((record) => record.exerciseId)])).toEqual([
+      ['agent', 'Testovací kurz', ['prvni-prompt']],
+      ['data', 'Digitální akademie: Data', ['prvni-tabulka']],
+    ]);
+  });
+
+  it('puts unknown courses last under their id and omits empty groups', () => {
+    const groups = groupByCourse([{ courseId: 'zmizely' }, { courseId: 'data' }], multiCatalog);
+    expect(groups.map((group) => [group.courseId, group.title])).toEqual([
+      ['data', 'Digitální akademie: Data'],
+      ['zmizely', 'zmizely'],
+    ]);
   });
 });

@@ -25,6 +25,31 @@ describe('Markdown export', () => {
     expect(markdown).toContain('### Reflexe\n\n_(nevyplněno)_');
   });
 
+  it('groups answers by course title when there are several courses', () => {
+    const record = (courseTitle: string, exerciseId: string) => ({
+      exerciseId,
+      exerciseRevision: 1,
+      exerciseTitle: exerciseId,
+      lectureTitle: null,
+      partTitle: null,
+      courseTitle,
+      fieldLabels: { a: 'Pole' },
+      fields: { a: 'Text' },
+      savedAt: new Date('2026-10-05T10:00:00Z'),
+    });
+    const markdown = responsesToMarkdown([record('A', 'prvni'), record('B', 'druhe')], { title: 'Odpovědi' });
+    expect(markdown).toContain('## A\n');
+    expect(markdown).toContain('## B\n');
+    expect(markdown).toContain('### prvni\n');
+    expect(markdown).toContain('#### Pole\n\nText');
+    expect(markdown.indexOf('## A')).toBeLessThan(markdown.indexOf('## B'));
+
+    const single = responsesToMarkdown([record('A', 'prvni')], { title: 'Odpovědi' });
+    expect(single).not.toContain('## A');
+    expect(single).toContain('## prvni\n');
+    expect(single).toContain('### Pole\n');
+  });
+
   it('builds safe file names', () => {
     expect(exportFileName('odpovedi-Jana.Nováková@example.test')).toBe('odpovedi-jana-novakova-example-test.md');
     expect(exportFileName('…')).toBe('odpovedi.md');

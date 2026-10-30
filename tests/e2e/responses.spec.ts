@@ -120,6 +120,36 @@ test.describe('exercise responses', () => {
     expect(await adminExport.text()).toContain('Tajný **prompt** autorky');
   });
 
+  test('answers are grouped by course for the learner and filterable by course for admins', async ({ browser }) => {
+    const author = await createActiveUser('two-courses');
+    const page = await (await signedInContext(browser, author)).newPage();
+    for (const [url, label, text] of [
+      [EXERCISE, 'Použitý prompt', 'Odpověď hlavního kurzu'],
+      ['/data/lekce/grafy/prvni-graf', 'Postup', 'Odpověď datového kurzu'],
+    ] as const) {
+      await page.goto(url);
+      await field(page, label).fill(text);
+      await panel(page).getByRole('button', { name: 'Uložit odpověď' }).click();
+      await expect(panel(page).getByRole('status')).toContainText('Uloženo');
+    }
+
+    await page.goto('/moje-odpovedi');
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Agentní programování s Codex CLI a Claude Code', 'Digitální akademie: Data']);
+    await expect(page.locator('.answer-card h3')).toHaveText(['Váš první prompt', 'Váš první graf']);
+
+    const admin = await (await browser.newContext({ storageState: SEED.admin.state })).newPage();
+    await admin.goto(`/admin/odpovedi?uzivatel=${author.id}`);
+    await expect(admin.locator('.answer-card')).toHaveCount(2);
+    await admin.getByLabel('Kurz', { exact: true }).selectOption({ label: 'Digitální akademie: Data' });
+    await admin.getByRole('button', { name: 'Filtrovat' }).click();
+    await expect(admin.locator('.answer-card')).toHaveCount(1);
+    await expect(admin.locator('.answer-card')).toContainText('Odpověď datového kurzu');
+    const exported = await admin.request.get(`/admin/odpovedi/export.md?uzivatel=${author.id}&kurz=data`);
+    const markdown = await exported.text();
+    expect(markdown).toContain('Odpověď datového kurzu');
+    expect(markdown).not.toContain('Odpověď hlavního kurzu');
+  });
+
   test('saving needs a session', async ({ browser }) => {
     const anonymous = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const response = await anonymous.request.post('/odpovedi/prvni-prompt-reflexe', {
