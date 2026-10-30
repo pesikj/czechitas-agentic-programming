@@ -184,7 +184,7 @@ async function rebuildSnapshot(revision: { id: string; sha: string }): Promise<S
   try {
     const snapshot = await buildSnapshot(checkout.dir, revision);
     if (snapshot.result.model) {
-      // A row in an old format is replaced (its assets cascade) in the same transaction.
+      // Deletes any stored row first (a no-op if none), so an old-format row is replaced with its assets cascading.
       const replace = getDb().transaction(async (tx) => {
         await deleteSnapshot(tx, revision.id);
         await saveSnapshot(tx, revision.id, snapshot);

@@ -13,7 +13,7 @@ dist/
 !.env.example
 
 # Local data: fetched and published content revisions
-data/
+/data/
 
 # Tests
 coverage/
