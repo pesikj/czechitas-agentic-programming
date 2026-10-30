@@ -1,102 +1,15 @@
 ---
-import CourseLayout from '../../../layouts/CourseLayout.astro';
-import ContentIssues from '../../../components/ContentIssues.astro';
-import ExercisePanel from '../../../components/ExercisePanel.astro';
-import PartPager from '../../../components/PartPager.astro';
-import {
-  findLecture,
-  findPart,
-  lectureHref,
-  otherContext,
-  partContext,
-  partFileName,
-} from '../../../lib/navigation';
+import PartView from '../../../views/PartView.astro';
+import { partStatus } from '../../../lib/navigation';
 import { visibleModel } from '../../../lib/content/visibility';
-import { getCourseContent, getRenderedPart } from '../../../server/content/provider';
-import { getResponse } from '../../../server/responses';
+import { getCourseContent } from '../../../server/content/provider';
 
 const content = await getCourseContent();
-const { issues } = content;
-const user = Astro.locals.user;
 // Signed-out visitors (on a public lecture) see only the public lectures.
-const model = visibleModel(content.model, Boolean(user));
-const lecture = model && findLecture(model, Astro.params.lectureId ?? '');
-if (model && !lecture) return Astro.rewrite('/404');
-const part = lecture && findPart(lecture, Astro.params.partId ?? '');
-if (!model || !part) Astro.response.status = model || content.state === 'empty' ? 404 : 500;
-
-const context = model && lecture && part ? partContext(model, lecture, part, content.courses) : otherContext(model, content.courses);
-const html = part ? await getRenderedPart(part) : '';
-// The renderer leaves a placeholder where each exercise panel belongs.
-const segments = html.split(/<div class="exercise" data-exercise-id="([^"]*)"><\/div>/);
-const saved = new Map(
-  user
-    ? await Promise.all(
-        (part?.exercises ?? []).map(async (exercise) => [exercise.id, await getResponse(user.id, exercise.id)] as const),
-      )
-    : [],
-);
-const returnPath = Astro.url.pathname;
-const outcomeFor = (exerciseId: string) =>
-  Astro.url.searchParams.get('ulozeno') === exerciseId ? 'saved' : Astro.url.searchParams.get('chyba') === exerciseId ? 'error' : undefined;
+const model = visibleModel(content.model, Boolean(Astro.locals.user));
+const status = partStatus(model, content.state, Astro.params.lectureId ?? '', Astro.params.partId ?? '');
+if (status === 'not-found') return Astro.rewrite('/404');
+Astro.response.status = status;
 ---
 
-<CourseLayout
-  title={part?.title ?? 'Část nenalezena'}
-  courseTitle={model?.title}
-  model={model}
-  current={lecture && part ? { lectureId: lecture.id, partId: part.id } : undefined}
-  crumbs={lecture
-    ? [{ label: lecture.id, href: lectureHref(lecture) }, ...(part ? [{ label: partFileName(part) }] : [{ label: '?' }])]
-    : []}
-  context={context}
->
-  {!model && <ContentIssues issues={issues} empty={content.state === 'empty'} />}
-  {
-    model && lecture && !part && (
-      <div class="message-page">
-        <h1>Tato část už neexistuje nebo byla přesunuta</h1>
-        <p>
-          Odkaz vede na část lekce „{lecture.title}“, která v aktuálních materiálech není. Mohla být přejmenována,
-          přesunuta nebo odstraněna.
-        </p>
-        <ul>
-          <li>
-            <a href={lectureHref(lecture)}>Otevřít začátek lekce „{lecture.title}“</a>
-          </li>
-          <li>
-            <a href="/">Zpět na přehled lekcí</a>
-          </li>
-        </ul>
-      </div>
-    )
-  }
-  {
-    lecture && part && context.page === 'part' && (
-      <article class="part">
-        <header class="part-header">
-          <p class="lecture-title">{lecture.title}</p>
-          <h1>{part.title}</h1>
-          <p class="position">
-            Část {part.number} z {lecture.parts.length}
-          </p>
-        </header>
-        <div class="prose">
-          {segments.map((segment, index) =>
-            index % 2 === 0 ? (
-              <Fragment set:html={segment} />
-            ) : (
-              <ExercisePanel
-                exercise={model?.exercises.get(segment)}
-                saved={saved.get(segment)}
-                returnPath={returnPath}
-                outcome={outcomeFor(segment)}
-              />
-            ),
-          )}
-        </div>
-        <PartPager context={context} />
-      </article>
-    )
-  }
-</CourseLayout>
+<PartView content={content} />

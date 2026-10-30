@@ -1,5 +1,5 @@
 // Access control: only signed-in users with active accounts reach course pages and images,
-// except the title page and lectures the content marks as public (and their images), which anyone can read.
+// except the title pages and lectures the content marks as public (and their images), which anyone can read.
 import { defineMiddleware } from 'astro:middleware';
 import { isPublicContentPath } from './lib/content/visibility';
 import { withNext } from './server/auth/redirect';
@@ -59,15 +59,16 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return next();
   }
 
-  /** The title page, lectures marked public and their images are readable without signing in (GET only). */
+  /** Title pages, lectures marked public and their images are readable without signing in (GET only). */
   async function isPublicContent(): Promise<boolean> {
     if (request.method !== 'GET' && request.method !== 'HEAD') return false;
-    // The title page lists only public lectures to visitors.
+    // The title pages list only public lectures to visitors.
     if (path === '/') return true;
-    if (!path.startsWith('/lekce/') && !path.startsWith('/obsah/')) return false;
     // If the content cannot be loaded, fall back to requiring sign-in.
     const { model: catalog } = await getContent().catch(() => ({ model: undefined }));
-    return catalog ? isPublicContentPath(catalog, path) : false;
+    if (!catalog) return false;
+    if (catalog.courses.slice(1).some((course) => path === `/${course.id}` || path === `/${course.id}/`)) return true;
+    return isPublicContentPath(catalog, path);
   }
 });
 

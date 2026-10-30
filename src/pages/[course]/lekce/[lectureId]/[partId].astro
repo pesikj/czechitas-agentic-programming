@@ -1,0 +1,17 @@
+---
+import PartView from '../../../../views/PartView.astro';
+import { partStatus } from '../../../../lib/navigation';
+import { visibleModel } from '../../../../lib/content/visibility';
+import { getRoutedCourseContent } from '../../../../server/content/provider';
+
+const content = await getRoutedCourseContent(Astro.params.course);
+if (!content) return Astro.rewrite('/404');
+// Signed-out visitors (on a public lecture) see only the public lectures.
+const model = visibleModel(content.model, Boolean(Astro.locals.user));
+// A lecture of another course is not found here either.
+const status = partStatus(model, content.state, Astro.params.lectureId ?? '', Astro.params.partId ?? '');
+if (status === 'not-found') return Astro.rewrite('/404');
+Astro.response.status = status;
+---
+
+<PartView content={content} />

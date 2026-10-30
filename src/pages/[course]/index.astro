@@ -1,0 +1,11 @@
+---
+// An additional course's title page; the main course has `/`.
+import HomeView from '../../views/HomeView.astro';
+import { getRoutedCourseContent } from '../../server/content/provider';
+
+const content = await getRoutedCourseContent(Astro.params.course);
+if (!content) return Astro.rewrite('/404');
+if (content.state === 'invalid') Astro.response.status = 500;
+---
+
+<HomeView content={content} />

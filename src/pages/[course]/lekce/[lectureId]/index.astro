@@ -1,0 +1,10 @@
+---
+import { findLecture, lectureHref } from '../../../../lib/navigation';
+import { visibleModel } from '../../../../lib/content/visibility';
+import { getRoutedCourseContent } from '../../../../server/content/provider';
+
+const model = visibleModel((await getRoutedCourseContent(Astro.params.course))?.model, Boolean(Astro.locals.user));
+const lecture = model && findLecture(model, Astro.params.lectureId ?? '');
+if (!lecture) return Astro.rewrite('/404');
+return Astro.redirect(lectureHref(lecture), 302);
+---

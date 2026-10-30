@@ -1,0 +1,54 @@
+---
+import CourseLayout from '../layouts/CourseLayout.astro';
+import { otherContext } from '../lib/navigation';
+import { searchContent, type CourseContent } from '../server/content/provider';
+import { czechCount } from '../server/format';
+
+interface Props {
+  /** The course to show, loaded by the page (which sets the response status). */
+  content: CourseContent;
+}
+
+const query = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, 200);
+const { model, courses } = Astro.props.content;
+const hits = query && model ? await searchContent(query, model.id) : [];
+---
+
+<CourseLayout title={query ? `Hledání: ${query}` : 'Hledání'} courseTitle={model?.title} model={model} context={otherContext(model, courses)} crumbs={[{ label: 'hledat' }]}>
+  <div class="search-page">
+    <h1>Hledání v materiálech</h1>
+    <form method="get" role="search" class="search-form">
+      <label for="search-q" class="visually-hidden">Hledaný výraz</label>
+      <input id="search-q" name="q" type="search" value={query} placeholder="např. prompt, terminál" />
+      <button type="submit">Hledat</button>
+    </form>
+    {
+      query && (
+        <p role="status">
+          {hits.length === 0
+            ? `Výrazu „${query}“ neodpovídá žádná část. Zkuste jiné nebo kratší slovo.`
+            : `${czechCount(hits.length, 'nalezená část', 'nalezené části', 'nalezených částí')} pro „${query}“.`}
+        </p>
+      )
+    }
+    {
+      hits.length > 0 && (
+        <ol class="search-results" role="list">
+          {hits.map((hit) => (
+            <li>
+              <a href={hit.href}>{hit.partTitle}</a>
+              <span class="where">
+                {hit.lectureTitle} · část {hit.partNumber}
+              </span>
+              <p class="snippet">
+                {hit.snippet.before}
+                {hit.snippet.match && <mark>{hit.snippet.match}</mark>}
+                {hit.snippet.after}
+              </p>
+            </li>
+          ))}
+        </ol>
+      )
+    }
+  </div>
+</CourseLayout>

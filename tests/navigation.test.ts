@@ -13,6 +13,7 @@ import {
   partContext,
   partFileName,
   partHref,
+  partStatus,
   searchHref,
 } from '../src/lib/navigation';
 
@@ -29,6 +30,15 @@ describe('navigation', () => {
     expect(partHref({ id: 'tabulky', basePath: '/data' }, 'uvod')).toBe('/data/lekce/tabulky/uvod');
     expect(lectureHref(lecture('zaklady'))).toBe('/lekce/zaklady/uvod');
     expect(partFileName(part('zaklady', 'prvni-cviceni'))).toBe('02-prvni-cviceni');
+  });
+
+  it('answers part pages with a status, or not found for a lecture of another course', () => {
+    expect(partStatus(model, 'ready', 'zaklady', 'uvod')).toBe(200);
+    expect(partStatus(model, 'ready', 'zaklady', 'neexistuje')).toBe(404);
+    expect(partStatus(model, 'ready', 'tabulky', 'uvod')).toBe('not-found');
+    expect(partStatus(dataCourse, 'ready', 'tabulky', 'uvod')).toBe(200);
+    expect(partStatus(undefined, 'empty', 'zaklady', 'uvod')).toBe(404);
+    expect(partStatus(undefined, 'invalid', 'zaklady', 'uvod')).toBe(500);
   });
 
   it('returns undefined for unknown ids', () => {

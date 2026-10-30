@@ -6,6 +6,7 @@ interface Props {
 }
 
 const { context } = Astro.props;
+const courseHref = context.courses?.find((course) => course.id === context.currentCourse)?.href ?? '/';
 ---
 
 <nav class="pager" aria-label="Navigace mezi částmi">
@@ -31,7 +32,7 @@ const { context } = Astro.props;
         {context.nextLecture ? (
           <a href={context.nextLecture.href}>Další lekce: {context.nextLecture.title} →</a>
         ) : (
-          <a href="/">Zpět na přehled lekcí</a>
+          <a href={courseHref}>Zpět na přehled lekcí</a>
         )}
       </span>
     )

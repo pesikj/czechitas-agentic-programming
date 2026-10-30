@@ -24,25 +24,28 @@ function filterToc(nodes: TocNode[], ids: Set<string>): TocNode[] {
 }
 
 /**
- * Whether a URL path (as requested, percent-encoded) is a public lecture page
- * (`/lekce/<lecture>[/<part>]`) or an image or file used by a public lecture (`/obsah/<path>`).
+ * Whether a URL path (as requested, percent-encoded) is a public lecture page of its own course
+ * (`/lekce/<lecture>[/<part>]` for the main course, `/<course>/lekce/<lecture>[/<part>]` for an
+ * additional one) or an image or file used by a public lecture of any course (`/obsah/<path>`).
  */
 export function isPublicContentPath(catalog: Catalog, pathname: string): boolean {
-  // Only the main course has routes so far.
-  const model = catalog.courses[0]!;
   const segments = decodeSegments(pathname);
   if (!segments) return false;
   const [route, ...rest] = segments;
-  if (route === 'lekce' && (rest.length === 1 || rest.length === 2)) {
-    return model.lectures.some((lecture) => lecture.public && lecture.id === rest[0]);
-  }
   if (route === 'obsah' && rest.length > 0) {
     const repoPath = rest.join('/');
-    return model.lectures.some(
-      (lecture) => lecture.public && lecture.parts.some((part) => part.assets.some((asset) => asset.exists && asset.path === repoPath)),
+    return catalog.courses.some((course) =>
+      course.lectures.some(
+        (lecture) => lecture.public && lecture.parts.some((part) => part.assets.some((asset) => asset.exists && asset.path === repoPath)),
+      ),
     );
   }
-  return false;
+  // The main course has no prefix; an additional course is prefixed with its id.
+  const [main, ...additional] = catalog.courses;
+  const course = route === 'lekce' ? main : additional.find((candidate) => candidate.id === route);
+  const lecturePath = route === 'lekce' ? rest : rest[0] === 'lekce' ? rest.slice(1) : [];
+  if (!course || (lecturePath.length !== 1 && lecturePath.length !== 2)) return false;
+  return course.lectures.some((lecture) => lecture.public && lecture.id === lecturePath[0]);
 }
 
 function decodeSegments(pathname: string): string[] | undefined {

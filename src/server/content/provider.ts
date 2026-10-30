@@ -252,6 +252,16 @@ export async function getCourseContent(courseId?: string): Promise<CourseContent
   return { state, issues, ...(revision ? { revision } : {}), catalog, ...(model ? { model } : {}), courses: courseTargets(catalog) };
 }
 
+/**
+ * The content for an additional course's `/<course>/…` route, or undefined (not found) when the
+ * content is ready but has no such additional course. The main course is served at the root only.
+ */
+export async function getRoutedCourseContent(courseId: string | undefined): Promise<CourseContent | undefined> {
+  const content = await getCourseContent(courseId ?? '');
+  const isMain = content.model !== undefined && content.model === content.catalog?.courses[0];
+  return content.state === 'ready' && (!content.model || isMain) ? undefined : content;
+}
+
 /** Sanitized HTML of a part, with image URLs pointing at the protected asset route. */
 export async function getRenderedPart(part: Part): Promise<string> {
   const snapshot = await currentSnapshot();

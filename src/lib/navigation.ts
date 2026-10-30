@@ -41,6 +41,23 @@ export function findPart(lecture: Lecture, partId: string): Part | undefined {
   return lecture.parts.find((part) => part.id === partId);
 }
 
+/**
+ * How a lecture part page answers, given the course as the user may see it: `not-found` for a
+ * lecture the course does not have, otherwise the status (404 for a missing part or no content
+ * yet, 500 for invalid content).
+ */
+export function partStatus(
+  model: ContentModel | undefined,
+  state: 'ready' | 'invalid' | 'empty',
+  lectureId: string,
+  partId: string,
+): 'not-found' | 200 | 404 | 500 {
+  if (!model) return state === 'empty' ? 404 : 500;
+  const lecture = findLecture(model, lectureId);
+  if (!lecture) return 'not-found';
+  return findPart(lecture, partId) ? 200 : 404;
+}
+
 export interface Neighbours {
   previous?: Part;
   next?: Part;
