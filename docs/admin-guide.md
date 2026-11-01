@@ -58,3 +58,12 @@ Obsah se nikdy neaktualizuje sám: ani podle času, ani při změně v repozitá
   - **„Nefunguje mi jednorázové heslo“**: platí jen poslední pozvánka a jen do nastavení vlastního hesla. Případně poslat novou.
   - **„Zapomněl(a) jsem heslo“**: odkaz Zapomenuté heslo, případně Obnovit přístup.
   - **„Nevidím materiály“**: je obsah zveřejněný (Administrace → Obsah)? Není účet deaktivovaný?
+
+
+## Stav materiálů a připomínky
+
+Na úvodní stránce každého kurzu vidí administrátoři u lekcí stav **Připraveno**, **Rozpracováno**, **Nezahájeno** nebo **Stav neznámý**. Stav se upravuje v `lecture.yaml` polem `status` (`ready`, `in-progress`, `not-started`, `unknown`) a zveřejňuje běžnou aktualizací obsahu. Chybějící stav znamená neznámý. Studující stav nevidí; přístup k lekci se stavem nemění.
+
+V rozpracované lekci je vpravo dole tlačítko **Přidat připomínku**, které zůstává dostupné při posouvání. Vyberte text materiálu před kliknutím a vloží se jako citace; lze také napsat připomínku bez výběru. Text podporuje Markdown. Tlačítko **Uložit připomínku** vytvoří GitHub issue v obsahovém repozitáři. Issue obsahuje váš e-mail, odkaz na část, zdrojový soubor a zveřejněnou revizi. Poté se zobrazí odkaz na vytvořené issue. Připomínky se neukládají do databáze webu a není zde interní historie.
+
+Issue se přiřadí vlastníkovi osobního repozitáře, u organizace uživateli `pesikj`. Pokud přiřazení není možné, vznikne nepřiřazené issue a zobrazí se upozornění. Při chybě odeslání text zůstane v dialogu. Při nejasném výsledku nejprve zkontrolujte issues v repozitáři (odkaz se otevře v nové kartě a rozepsaný text zůstane zachovaný), aby opakovaným odesláním nevznikla duplicita. Zavřením stránky se neodeslaný text ztratí. Pokud se mezitím zveřejnily nové materiály, zkopírujte si text a obnovte stránku. Hlášení vyžaduje JavaScript a nastavený GitHub token (viz provozní dokumentace).

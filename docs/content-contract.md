@@ -48,6 +48,7 @@ toc:
 id: uvod-do-agentu
 title: Úvod do agentního programování
 public: true                 # optional; readable without signing in
+status: in-progress          # optional; ready | in-progress | not-started | unknown
 parts:
   - 01-co-je-agent.md
   - 02-instalace.md
@@ -55,6 +56,7 @@ parts:
 
 - `title` is shown as written. The site adds no lecture numbers of its own, so number lectures in the title if you want them (`01 – Instalace nástrojů`); leading zeros are dropped on the site (`1 – Instalace nástrojů`).
 - `public` (optional, default `false`): when `true`, anyone can read the lecture, its images and its linked files without an account, and the title page and sign-in page link to it. Use it for material learners need before the course, such as tool installation. Everything else stays sign-in only.
+- `status` is an admin-only readiness indicator on the course home page. Missing status means `unknown` (Stav neznámý). Invalid values block publishing. Status does not affect access. Admins can report content issues only for `in-progress` lectures. Changes take effect through normal content publishing.
 - `parts` order is the part order (**Část 1 z N**). The paths are relative to the lecture directory and must be `.md` files inside it.
 - A `.md` file in the lecture directory that is not listed is reported as a warning.
 

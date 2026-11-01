@@ -66,7 +66,10 @@ export interface Catalog {
   exercises: Map<string, Exercise>;
 }
 
+export type LectureStatus = 'ready' | 'in-progress' | 'not-started' | 'unknown';
+
 export interface Lecture {
+  status: LectureStatus;
   id: string;
   courseId: string;
   /** The course's URL prefix (see `ContentModel.basePath`). */

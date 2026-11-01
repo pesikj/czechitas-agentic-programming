@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -363,5 +363,32 @@ describe('renderMarkdown — page features', () => {
       mode: 'content',
     });
     expect(html).toContain('<p class="alternative-label"><strong>Windows</strong></p>');
+  });
+});
+
+
+describe('lecture readiness', () => {
+  it.each(['ready', 'in-progress', 'not-started', 'unknown', undefined])('loads status %s without changing public visibility', async (status) => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'lecture-status-'));
+    try {
+      await cp(path.join(fixtures, 'minimal'), dir, { recursive: true });
+      const file = path.join(dir, 'lectures/01-zaklady/lecture.yaml');
+      await writeFile(file, (await readFile(file, 'utf8')) + `\npublic: true\n${status ? `status: ${status}\n` : ''}`);
+      const result = await loadContent(dir);
+      expect(result.issues).toEqual([]);
+      expect(result.model?.courses[0]?.lectures[0]).toMatchObject({ status: status ?? 'unknown', public: true });
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+
+  it('rejects invalid readiness', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'lecture-status-'));
+    try {
+      await cp(path.join(fixtures, 'minimal'), dir, { recursive: true });
+      const file = path.join(dir, 'lectures/01-zaklady/lecture.yaml');
+      await writeFile(file, (await readFile(file, 'utf8')) + '\nstatus: wrong\n');
+      const result = await loadContent(dir);
+      expect(result.model).toBeUndefined();
+      expect(result.issues).toContainEqual(expect.objectContaining({ code: 'schema-invalid' }));
+    } finally { await rm(dir, { recursive: true, force: true }); }
   });
 });

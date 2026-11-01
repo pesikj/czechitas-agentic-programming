@@ -1,0 +1,33 @@
+---
+import { getConfig } from '../server/config';
+import { parseGithubRepository } from '../server/content/github-issues';
+
+interface Props {
+  courseId: string;
+  lectureId: string;
+  partId: string;
+  revisionSha: string | null;
+}
+const { courseId, lectureId, partId, revisionSha } = Astro.props;
+const repository = parseGithubRepository(getConfig().CONTENT_REPO_URL);
+const repositoryIssuesUrl = repository ? `${repository.htmlUrl}/issues` : undefined;
+---
+<button type="button" id="content-report-trigger" class="content-report-trigger" aria-haspopup="dialog" aria-controls="content-report" hidden>Přidat připomínku</button>
+<noscript><p>Připomínky k materiálům lze odeslat po zapnutí JavaScriptu.</p></noscript>
+<dialog data-repository-issues-url={repositoryIssuesUrl} id="content-report" class="content-report-dialog" aria-labelledby="content-report-title" aria-describedby="content-report-help">
+  <form data-course-id={courseId} data-lecture-id={lectureId} data-part-id={partId} data-revision-sha={revisionSha ?? ''}>
+    <h2 id="content-report-title">Připomínka k materiálům</h2>
+    <p id="content-report-help">Popište problém v Markdownu. Vybraný text je vložen jako citace. Připomínka se spolu s vaším e-mailem a odkazem na tuto část uloží jako issue v obsahovém repozitáři na GitHubu.</p>
+    <label for="content-report-body">Připomínka</label>
+    <textarea id="content-report-body" name="body" rows="8" maxlength="20000" required autofocus aria-describedby="content-report-help"></textarea>
+    <p class="content-report-message" role="status" aria-live="polite"></p>
+    <div class="content-report-links"></div>
+    <div class="content-report-actions">
+      <button type="submit">Uložit připomínku</button>
+      <button type="button" data-report-cancel>Zrušit</button>
+    </div>
+  </form>
+</dialog>
+<script>
+  import '../scripts/content-report';
+</script>

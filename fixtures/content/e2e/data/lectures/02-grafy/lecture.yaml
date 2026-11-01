@@ -2,3 +2,5 @@ id: grafy
 title: Grafy
 parts:
   - grafy.md
+
+status: not-started

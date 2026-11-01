@@ -3,13 +3,14 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { and, eq, ne } from 'drizzle-orm';
-import type { Catalog, ContentModel, Exercise } from '../../lib/content/types';
+import type { Catalog, ContentModel, Exercise, Lecture } from '../../lib/content/types';
 import { getDb } from '../db/client';
 import { contentAssets, contentRevisions, contentSnapshots } from '../db/schema';
 import type { Snapshot } from './provider';
 
 /** `Catalog` as JSON: the exercise maps are rebuilt from the parts on load. */
-export type StoredModel = { courses: Omit<ContentModel, 'exercises'>[] };
+type StoredLecture = Omit<Lecture, 'status'> & { status?: Lecture['status'] };
+export type StoredModel = { courses: (Omit<ContentModel, 'exercises' | 'lectures'> & { lectures: StoredLecture[] })[] };
 
 type Db = ReturnType<typeof getDb>;
 type Transaction = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -65,7 +66,7 @@ export async function loadSnapshot(revision: { id: string; sha: string }): Promi
       for (const part of lecture.parts) for (const exercise of part.exercises) exercises.set(exercise.id, exercise);
     }
     for (const [id, exercise] of exercises) catalog.exercises.set(id, exercise);
-    catalog.courses.push({ ...stored, exercises });
+    catalog.courses.push({ ...stored, lectures: stored.lectures.map((lecture) => ({ ...lecture, status: lecture.status ?? 'unknown' })), exercises });
   }
   return {
     revision,
