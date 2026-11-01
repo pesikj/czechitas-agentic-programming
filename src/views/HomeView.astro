@@ -1,6 +1,7 @@
 ---
 import CourseLayout from '../layouts/CourseLayout.astro';
 import ContentIssues from '../components/ContentIssues.astro';
+import { lectureStatus, lectureStatusLabel } from '../lib/lecture-status';
 import HelpList from '../components/HelpList.astro';
 import type { Lecture, TocNode } from '../lib/content/types';
 import { visibleModel } from '../lib/content/visibility';
@@ -70,6 +71,7 @@ const otherCourses = content.courses.filter((course) => course.id !== model?.id)
                   <li>
                     <a href={lectureHref(item.lecture)}>{item.lecture.title}</a>
                     <span class="count">{partCount(item.lecture.parts.length)}</span>
+                    {Astro.locals.user?.role === 'admin' && <span class="lecture-status" data-status={lectureStatus(item.lecture)}>{lectureStatusLabel(lectureStatus(item.lecture))}</span>}
                   </li>
                 );
               })}

@@ -33,7 +33,7 @@ const configSchema = z.object({
   CONTENT_BRANCH: z.string().min(1).default('main'),
   /**
    * Access token for a private content repository fetched over HTTPS, e.g. a fine-grained GitHub
-   * token with read-only access to its contents. Kept out of CONTENT_REPO_URL, so it is never shown.
+   * token with Contents read, Issues read/write and Metadata read permissions. Kept out of CONTENT_REPO_URL, so it is never shown.
    */
   CONTENT_REPO_TOKEN: z
     .string()

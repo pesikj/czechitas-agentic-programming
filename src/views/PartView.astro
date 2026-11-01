@@ -1,6 +1,8 @@
 ---
 import CourseLayout from '../layouts/CourseLayout.astro';
 import ContentIssues from '../components/ContentIssues.astro';
+import ContentReport from '../components/ContentReport.astro';
+import { lectureStatus } from '../lib/lecture-status';
 import ExercisePanel from '../components/ExercisePanel.astro';
 import PartPager from '../components/PartPager.astro';
 import {
@@ -101,6 +103,9 @@ const outcomeFor = (exerciseId: string) =>
           )}
         </div>
         <PartPager context={context} />
+        {user?.role === 'admin' && lectureStatus(lecture) === 'in-progress' && (
+          <ContentReport courseId={lecture.courseId} lectureId={lecture.id} partId={part.id} revisionSha={content.revision?.sha ?? null} />
+        )}
       </article>
     )
   }

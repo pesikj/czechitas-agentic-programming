@@ -8,6 +8,7 @@ import { getDb } from '../../src/server/db/client';
 import { contentAssets, contentSnapshots } from '../../src/server/db/schema';
 import { activateSnapshot, getContent, getCourseContent, getRenderedPart, getRoutedCourseContent, resolveAsset, searchContent } from '../../src/server/content/provider';
 import { getActiveRevision, publishContent } from '../../src/server/content/publish';
+import { loadSnapshot } from '../../src/server/content/snapshot-store';
 import { CHECKOUT_PREFIX, repositorySettings } from '../../src/server/content/repository';
 import { TEST_CONTENT_REPO } from '../../vitest.config';
 import { commitAll } from '../support/content-repo';
@@ -189,5 +190,28 @@ describe('content publishing', () => {
     expect(row?.model.courses.map((course) => course.id)).toEqual(['agent', 'data']);
     expect(await storedRevisions()).toEqual([active.id]);
     expect(await storedAssets(active.id)).toEqual([DATA_IMAGE, ...ASSETS]);
+  });
+});
+
+
+describe('lecture readiness snapshots', () => {
+  it('round trips both courses and normalizes old snapshots without republishing', async () => {
+    for (const relative of ['lectures/01-zaklady/lecture.yaml', 'data/lectures/01-tabulky/lecture.yaml']) {
+      edit(relative, (text) => text + '\nstatus: in-progress\n');
+    }
+    commitAll(TEST_CONTENT_REPO, 'Set lecture readiness');
+    const result = await publishContent(null);
+    expect(result.status).toBe('activated');
+    if (result.status !== 'activated' || !result.revision.commitSha) throw new Error('Publishing failed');
+    const revision = { id: result.revision.id, sha: result.revision.commitSha };
+    const snapshot = await loadSnapshot(revision);
+    expect(snapshot?.result.model?.courses.map((c) => c.lectures[0]?.status)).toEqual(['in-progress', 'in-progress']);
+    const [row] = await getDb().select().from(contentSnapshots).where(eq(contentSnapshots.revisionId, revision.id));
+    for (const course of row!.model.courses) for (const lecture of course.lectures) delete (lecture as { status?: string }).status;
+    await getDb().update(contentSnapshots).set({ model: row!.model }).where(eq(contentSnapshots.revisionId, revision.id));
+    const legacy = await loadSnapshot(revision);
+    expect(legacy?.result.model?.courses.flatMap((c) => c.lectures.map((l) => l.status))).toEqual(expect.arrayContaining(['unknown']));
+    expect(legacy?.result.model?.courses.every((c) => c.lectures.every((l) => l.status === 'unknown'))).toBe(true);
+    expect((await getActiveRevision())?.id).toBe(revision.id);
   });
 });

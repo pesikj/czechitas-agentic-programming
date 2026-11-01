@@ -1340,3 +1340,37 @@ dialog.unsaved-dialog button[value='save'] {
     margin-left: 0;
   }
 }
+
+/* Readiness is rendered only for administrators. */
+.lecture-status { display: inline-block; margin-inline-start: 1ch; padding-inline: 0.5ch; border: 1px solid var(--foreground2); font-size: 0.85em; }
+.lecture-status[data-status="in-progress"] { border-style: dashed; }
+
+
+.content-report-trigger {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right));
+  z-index: 21;
+  max-width: calc(100vw - 2rem);
+  min-height: 44px;
+  padding: 0.4lh 1ch;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border: 2px solid var(--accent);
+}
+.content-report-trigger[hidden] { display: none; }
+dialog.content-report-dialog {
+  width: min(92vw, 72ch);
+  max-height: calc(var(--report-viewport-height, 100dvh) - 2rem);
+  overflow-y: auto;
+  margin: auto;
+  padding: 1lh 2ch;
+  border: 2px solid var(--background3);
+  background: var(--background0);
+  color: var(--foreground0);
+}
+dialog.content-report-dialog::backdrop { background: rgb(0 0 0 / 0.6); }
+.content-report-dialog p { margin-block: 0.5lh 1lh; }
+.content-report-dialog textarea { display: block; width: 100%; min-height: 6lh; max-height: 35dvh; padding: 0.5lh 1ch; resize: vertical; background: var(--background1); color: var(--foreground0); border: 2px solid var(--background3); }
+.content-report-actions { display: flex; flex-wrap: wrap; gap: 1ch; margin-top: 1lh; }
+.content-report-actions button { min-height: 44px; padding: 0.4lh 1ch; border: 2px solid var(--background3); }
+.content-report-actions button[type='submit'] { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
