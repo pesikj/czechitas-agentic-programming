@@ -4,3 +4,5 @@ public: true
 parts:
   - 01-uvod.md
   - 02-filtry.md
+
+status: in-progress

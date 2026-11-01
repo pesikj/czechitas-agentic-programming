@@ -212,6 +212,7 @@ class Loader {
     this.shared.lectureIds.add(data.id);
 
     const lecture: Lecture = {
+      status: data.status ?? 'unknown',
       id: data.id,
       courseId: this.courseId,
       basePath: this.basePath,

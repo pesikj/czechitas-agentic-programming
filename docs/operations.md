@@ -76,3 +76,12 @@ If your plan offers it, also enable backups on the Postgres service in Railway.
 - **Headers:** responses carry a strict Content Security Policy (scripts and styles by hash; images, fetch requests and forms only from the site itself; no framing), plus `X-Frame-Options`, `nosniff`, `Referrer-Policy` and, over HTTPS, HSTS.
 - **Content files:** course images are served only to signed-in users (or with public lectures), and only files referenced by the published content. Nothing in `public/` contains course content.
 - **Rate limits** on sign-in and password resets are kept in memory, so they reset when the app restarts. That is fine for a single replica.
+
+
+## Content issue reporting token
+
+Admin feedback creates GitHub issues in `CONTENT_REPO_URL` using server-only `CONTENT_REPO_TOKEN`. Scope the fine-grained token to that content repository with **Contents: read**, **Issues: read/write**, **Metadata: read**. The token's account also needs repository write access to assign issues during creation. Check expiry and any organization approval requirements. Issues must be enabled. Never embed the token in the repository URL.
+
+Use an HTTPS GitHub URL for token-authenticated publishing. The reporting integration also recognizes GitHub SSH URLs as repository identities, but this does not change publishing's existing HTTPS requirement when using a token. Local repository paths and non-GitHub hosts remain usable for reading/publishing as before, but cannot receive issue reports. A reporting configuration error does not block reading lectures.
+
+Personal repositories assign reports to their owner; organization repositories use `pesikj`. If that user is not assignable, the report is created unassigned with a warning. Reports and their reporter email are stored in GitHub only. No internal issue history or outbox is maintained.

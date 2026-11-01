@@ -46,6 +46,7 @@ export const RESERVED_COURSE_IDS = [
 ];
 
 export const lectureSchema = z.strictObject({
+  status: z.enum(['ready', 'in-progress', 'not-started', 'unknown']).optional(),
   id: nonEmpty,
   title: nonEmpty,
   /** Readable without signing in. */

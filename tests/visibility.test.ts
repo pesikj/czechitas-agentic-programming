@@ -47,6 +47,7 @@ describe('public paths across courses', () => {
     basePath,
     title: id,
     public: isPublic,
+    status: 'unknown',
     dir: `${basePath ? 'data/' : ''}lectures/${id}`,
     parts: [
       {
